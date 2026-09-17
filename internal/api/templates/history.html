@@ -1,0 +1,50 @@
+{{define "content"}}
+<div class="section-head"><h2>History{{if .Subject}} - {{.Subject}}{{end}}</h2><span class="section-count">{{.Total}}</span>{{if .SeriesID}}<a class="btn btn-sm btn-ghost" href="/tv/{{.SeriesID}}">Back to series</a>{{end}}</div>
+<form class="library-toolbar" method="get" action="/history">
+  {{if .SeriesID}}<input type="hidden" name="series" value="{{.SeriesID}}">{{end}}
+  <input class="library-search" type="search" name="q" value="{{.Search}}" placeholder="Search titles and details…" aria-label="Search history">
+  <label class="release-filter-label">Event
+    <select class="release-filter" name="event" onchange="this.form.submit()">
+      <option value="">All events</option>
+      {{$ev := .Event}}{{range .Kinds}}<option value="{{.}}"{{if eq . $ev}} selected{{end}}>{{.}}</option>{{end}}
+    </select>
+  </label>
+  <label class="release-filter-label">Media
+    <select class="release-filter" name="media" onchange="this.form.submit()">
+      <option value="">All</option>
+      <option value="movie"{{if eq .MediaType "movie"}} selected{{end}}>Movies</option>
+      <option value="series"{{if eq .MediaType "series"}} selected{{end}}>TV</option>
+      <option value="music"{{if eq .MediaType "music"}} selected{{end}}>Music</option>
+    </select>
+  </label>
+  <button class="btn btn-sm btn-ghost" type="submit">Filter</button>
+</form>
+<div class="panel">
+  {{if .Events}}
+  <table class="data-table">
+    <thead><tr><th>Date</th><th>Event</th><th>Item</th><th>Details</th><th>Quality</th><th>Source</th></tr></thead>
+    <tbody>
+      {{range .Events}}
+      <tr>
+        <td class="nowrap">{{.When}}</td>
+        <td><span class="chip {{.Chip}}">{{.Label}}</span></td>
+        <td>{{if .ItemLink}}<a href="{{.ItemLink}}">{{.Title}}</a>{{else}}{{.Title}}{{end}}</td>
+        <td class="wrap">{{.Detail}}</td>
+        <td>{{if .Quality}}<span class="quality-pill">{{.Quality}}</span>{{end}}</td>
+        <td>{{.Source}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{if gt .Pages 1}}
+  <div class="form-row" style="margin-top:12px">
+    {{if gt .Page 1}}<a class="btn btn-sm btn-ghost" href="/history?page={{.PrevPage}}&event={{.Event}}&media={{.MediaType}}&q={{.Search}}">← Newer</a>{{end}}
+    <span class="notice">Page {{.Page}} of {{.Pages}}</span>
+    {{if lt .Page .Pages}}<a class="btn btn-sm btn-ghost" href="/history?page={{.NextPage}}&event={{.Event}}&media={{.MediaType}}&q={{.Search}}">Older →</a>{{end}}
+  </div>
+  {{end}}
+  {{else}}
+  <p class="notice">Nothing has happened yet. Grabs, imports, upgrades, renames, deletes and additions show up here.</p>
+  {{end}}
+</div>
+{{end}}

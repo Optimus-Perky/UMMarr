@@ -1,0 +1,163 @@
+{{define "content"}}
+{{$series := .Series}}
+{{$seriesID := $series.ID}}
+{{$hasIndexer := .HasIndexer}}
+<div class="page-toolbar" role="toolbar" aria-label="Series actions">
+  <button class="tool" type="button" hx-post="/tv/{{$seriesID}}/refresh" hx-swap="none" title="Re-fetch the series from TMDB and scan its folder for files">{{template "icon_refresh"}}<span>Refresh &amp; Scan</span></button>
+  {{if $hasIndexer}}
+  <button class="tool" type="button" hx-post="/tv/{{$seriesID}}/search" hx-target="#search-report" hx-swap="innerHTML" title="Search every season with missing monitored episodes and grab what UMMarr would accept">{{template "icon_search_big"}}<span>Search Monitored</span></button>
+  <button class="tool" type="button" hx-get="/tv/{{$seriesID}}/releases" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Search the indexers and pick a release yourself">{{template "icon_person_search"}}<span>Interactive Search</span></button>
+  {{end}}
+  <span class="tool-sep"></span>
+  <button class="tool" type="button" hx-get="/tv/{{$seriesID}}/rename-preview" hx-target="#rename-dialog-body" hx-swap="innerHTML" title="See which files would be renamed to match the naming templates">{{template "icon_sitemap"}}<span>Preview Rename</span></button>
+  <button class="tool" type="button" hx-get="/tv/{{$seriesID}}/manage-episodes" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Delete episode files">{{template "icon_file_edit"}}<span>Manage Episodes</span></button>
+  <a class="tool" href="/history?series={{$seriesID}}" title="Everything that happened to this series">{{template "icon_history"}}<span>History</span></a>
+  <button class="tool" type="button" hx-get="/tv/{{$seriesID}}/metadata" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Where the details came from, refresh them, or fix the match">{{template "icon_refresh"}}<span>Metadata</span></button>
+  <button class="tool" type="button" hx-post="/tv/{{$seriesID}}/episode-names" hx-target="#search-report" hx-swap="innerHTML" hx-disabled-elt="this" title="Ask the metadata providers for episode titles, summaries and air dates without touching the episode list">{{template "icon_file_edit"}}<span>Find Episode Names</span></button>
+  <button class="tool" type="button" hx-get="/tv/{{$seriesID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this series at the right TMDB entry">{{template "icon_target"}}<span>Fix Match</span></button>
+  <span class="tool-sep"></span>
+  <button class="tool" type="button" hx-get="/tv/{{$seriesID}}/monitor" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Choose which episodes are monitored">{{template "icon_bookmark"}}<span>Series Monitoring</span></button>
+  <button class="tool" type="button" hx-get="/tv/{{$seriesID}}/edit" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Monitoring, quality profile, path and tags">{{template "icon_wrench"}}<span>Edit</span></button>
+  <button class="tool tool-danger" type="button" hx-get="/tv/{{$seriesID}}/delete" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Remove the series, optionally with its files">{{template "icon_trash"}}<span>Delete</span></button>
+</div>
+<div class="detail-head">
+  {{if $series.PosterURL}}<div class="detail-poster" style="background-image:url('{{$series.PosterURL}}')"></div>
+  {{else}}<div class="detail-poster"></div>{{end}}
+  <div class="detail-body">
+    <div class="detail-title">
+      <h1>{{$series.Title}}</h1>
+      {{template "monitored_chip" .MonitoredChip}}
+    </div>
+    <div class="detail-facts">
+      {{if gt $series.Runtime.Int64 0}}<span>{{$series.Runtime.Int64}} Minutes</span>{{end}}
+      {{if .Rating}}<span class="detail-rating">&#9829; {{.Rating}}</span>{{end}}
+      {{if $series.Genres}}<span>{{range $i, $g := $series.Genres}}{{if $i}}, {{end}}{{$g}}{{end}}</span>{{end}}
+      {{if .YearRange}}<span>{{.YearRange}}</span>{{end}}
+    </div>
+    <div class="detail-badges">
+      {{if $series.Path.String}}<span class="badge" title="Folder">{{template "icon_folder"}} {{$series.Path.String}}</span>{{end}}
+      <span class="badge" title="Size on disk">{{template "icon_drive"}} {{if .SizeHuman}}{{.SizeHuman}}{{else}}0 B{{end}}</span>
+      {{if .QualityProfileName}}<span class="badge" title="Quality profile">{{template "icon_profile"}} {{.QualityProfileName}}</span>{{end}}
+      <span class="badge" title="Monitoring">{{if $series.Monitored}}Monitored{{else}}Unmonitored{{end}}</span>
+      {{if $series.StatusLabel}}<span class="badge" title="Status">{{$series.StatusLabel}}</span>{{end}}
+      {{if $series.Certification.String}}<span class="badge" title="Certification">{{$series.Certification.String}}</span>{{end}}
+      {{if $series.OriginalLanguage.String}}<span class="badge" title="Language">{{$series.OriginalLanguage.String}}</span>{{end}}
+      {{if $series.Network.String}}<span class="badge" title="Network">{{template "icon_network"}} {{$series.Network.String}}</span>{{end}}
+      {{if .Links}}
+      <details class="links-menu">
+        <summary class="badge">{{template "icon_external"}} Links</summary>
+        <div class="links-panel">{{range .Links}}<a href="{{.URL}}" target="_blank" rel="noopener">{{.Label}}</a>{{end}}</div>
+      </details>
+      {{end}}
+    </div>
+    {{if $series.Overview.String}}<p class="detail-overview">{{$series.Overview.String}}</p>{{end}}
+    {{if .ScanNotice}}<p class="indexer-test ok">{{.ScanNotice}}</p>{{end}}
+    <div id="search-report"></div>
+  </div>
+</div>
+
+<dialog id="rename-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()"><div id="rename-dialog-body"></div></dialog>
+
+<div class="panel">
+  <div class="panel-head">
+    <h2>Seasons</h2>
+    <button class="btn btn-sm btn-ghost" type="button" id="season-order">Newest first</button>
+  </div>
+  <div hidden hx-get="/tv/{{$seriesID}}/episodes/status" hx-trigger="load, every 5s" hx-swap="none"></div>
+  <div class="tree-card" style="padding:0;border:none;background:none">
+    {{range .Seasons}}
+    <details class="season-block" data-season="{{.SeasonNumber}}">
+      <summary class="season-head">
+        <div class="season-head-left">
+          {{template "monitored_chip" .MonitoredChip}}
+          <span class="season-name">{{if eq .SeasonNumber 0}}Specials{{else}}Season {{.SeasonNumber}}{{end}}</span>
+          {{template "season_stats" .}}
+        </div>
+        <span class="season-toggle"></span>
+        <div class="season-head-actions">
+          {{if $hasIndexer}}<button class="icon-btn" type="button" onclick="event.stopPropagation()" hx-post="/tv/{{$seriesID}}/seasons/{{.SeasonNumber}}/search" hx-target="#season-releases-{{.SeasonNumber}}" hx-swap="innerHTML" title="Automatic search: grab what UMMarr would accept">{{template "icon_bolt"}}</button><button class="icon-btn" type="button" onclick="event.stopPropagation()" hx-get="/tv/{{$seriesID}}/releases?season={{.SeasonNumber}}" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Search for season releases">{{template "icon_search"}}</button>{{end}}
+          <button class="icon-btn" type="button" onclick="event.stopPropagation()" hx-post="/tv/{{$seriesID}}/seasons/{{.SeasonNumber}}/episode-names" hx-target="#season-releases-{{.SeasonNumber}}" hx-swap="innerHTML" title="Find episode names: ask the metadata providers for this season's titles, summaries and air dates">{{template "icon_refresh"}}</button>
+        </div>
+      </summary>
+      <div id="season-releases-{{.SeasonNumber}}"></div>
+      {{if .Episodes}}
+      <table class="data-table season-episodes" data-table-id="episodes" data-default-hidden="dynamicrange,audiolangs,subtitles">
+        <thead><tr>
+          <th class="col-tight"></th>
+          <th data-sort="number" data-sort-dir="desc">#</th>
+          <th data-sort="text">Title</th>
+          <th data-col="airdate" data-sort="text">Air Date</th>
+          <th data-col="size" data-sort="number">Size</th>
+          <th data-col="group" data-sort="text">Release Group</th>
+          <th data-col="quality" data-sort="text">Quality</th><th data-col="videocodec" data-sort="text">Video Codec</th><th data-col="audioinfo" data-sort="text">Audio Info</th><th data-col="dynamicrange" data-sort="text">Dynamic Range</th><th data-col="audiolangs" data-sort="text">Audio Languages</th><th data-col="subtitles" data-sort="text">Subtitles</th>
+          <th data-col="status" data-sort="text">Status</th>
+          <th class="col-actions">
+            <div class="col-picker" data-for="episodes">
+              <button class="icon-btn" type="button" title="Table options">{{template "icon_gear"}}</button>
+              <div class="col-picker-panel" hidden>
+                <label><input type="checkbox" data-col="airdate" checked> Air Date</label>
+                <label><input type="checkbox" data-col="size" checked> Size</label>
+                <label><input type="checkbox" data-col="group" checked> Release Group</label>
+                <label><input type="checkbox" data-col="quality" checked> Quality</label>
+                <label><input type="checkbox" data-col="videocodec"> Video Codec</label>
+                <label><input type="checkbox" data-col="audioinfo"> Audio Info</label>
+                <label><input type="checkbox" data-col="dynamicrange"> Dynamic Range</label>
+                <label><input type="checkbox" data-col="audiolangs"> Audio Languages</label>
+                <label><input type="checkbox" data-col="subtitles"> Subtitles</label>
+                <label><input type="checkbox" data-col="status" checked> Status</label>
+              </div>
+            </div>
+          </th>
+        </tr></thead>
+        <tbody>
+          {{range .Episodes}}
+          {{template "episode_row" .}}
+          {{if $hasIndexer}}<tr class="expand-row"><td colspan="14" id="episode-releases-{{.ID}}"></td></tr>{{end}}
+          {{end}}
+        </tbody>
+      </table>
+      {{end}}
+    </details>
+    {{else}}
+    <p class="notice">No season/episode metadata yet.</p>
+    {{end}}
+  </div>
+</div>
+<script>
+(function () {
+  var button = document.getElementById('season-order');
+  var list = document.querySelector('.tree-card');
+  if (!button || !list) return;
+  // The page renders newest first; "oldest" reverses it. Remembered per browser.
+  function apply(order) {
+    var blocks = Array.prototype.slice.call(list.querySelectorAll(':scope > .season-block'));
+    var newestFirst = blocks.length < 2 || parseInt(blocks[0].dataset.season, 10) >= parseInt(blocks[blocks.length - 1].dataset.season, 10);
+    if ((order === 'oldest') === newestFirst) blocks.reverse().forEach(function (b) { list.appendChild(b); });
+    // Episodes inside each season follow the same order, expand rows in tow.
+    document.querySelectorAll('table.season-episodes tbody').forEach(function (tbody) {
+      var rows = Array.prototype.slice.call(tbody.querySelectorAll(':scope > tr')).filter(function (r) { return !r.classList.contains('expand-row'); });
+      if (rows.length < 2) return;
+      var num = function (r) { return parseInt(r.children[1].textContent, 10); };
+      var newestFirst = num(rows[0]) >= num(rows[rows.length - 1]);
+      if ((order === 'oldest') !== newestFirst) return;
+      rows.reverse().forEach(function (r) { var x = r.nextElementSibling; tbody.appendChild(r); if (x && x.classList.contains('expand-row')) tbody.appendChild(x); });
+    });
+    button.textContent = order === 'oldest' ? 'Oldest first' : 'Newest first';
+  }
+  var order = null;
+  try { order = localStorage.getItem('ummarr-season-order'); } catch (e) {}
+  apply(order || 'newest');
+  button.addEventListener('click', function () {
+    var next = button.textContent === 'Newest first' ? 'oldest' : 'newest';
+    apply(next);
+    try { localStorage.setItem('ummarr-season-order', next); } catch (e) {}
+  });
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target && e.detail.target.id === 'rename-dialog-body') {
+      var d = document.getElementById('rename-dialog');
+      if (d && !d.open) d.showModal();
+    }
+  });
+})();
+</script>
+{{end}}

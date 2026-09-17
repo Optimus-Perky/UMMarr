@@ -1,0 +1,21 @@
+{{define "custom_format_condition"}}
+<tr class="cf-condition">
+  <td>
+    <select name="c{{.Index}}_implementation" hx-get="/settings/custom-formats/condition" hx-target="closest tr" hx-swap="outerHTML" hx-include="closest tr" hx-vals='{"index":"{{.Index}}"}'>
+      {{$impl := .Implementation}}{{range .Kinds}}<option value="{{.Key}}"{{if eq .Key $impl}} selected{{end}} title="{{.Help}}">{{.Label}}</option>{{end}}
+    </select>
+  </td>
+  <td>
+    {{if .IsSize}}
+    <span class="input-unit"><input type="number" step="0.1" min="0" name="c{{.Index}}_min" value="{{printf "%.1f" .Min}}" aria-label="Minimum size"><span>to</span><input type="number" step="0.1" min="0" name="c{{.Index}}_max" value="{{printf "%.1f" .Max}}" aria-label="Maximum size"><span>GB</span></span>
+    {{else if .IsList}}
+    <select name="c{{.Index}}_value">{{$v := .Value}}{{range .Choices}}<option value="{{.}}"{{if eq . $v}} selected{{end}}>{{.}}</option>{{end}}</select>
+    {{else}}
+    <input type="text" name="c{{.Index}}_value" value="{{.Value}}" placeholder="Regular expression, e.g. \bREMUX\b" style="min-width:260px">
+    {{end}}
+  </td>
+  <td><label class="setting-check"><input type="checkbox" name="c{{.Index}}_negate"{{if .Negate}} checked{{end}}> Negate</label></td>
+  <td><label class="setting-check"><input type="checkbox" name="c{{.Index}}_required"{{if .Required}} checked{{end}}> Required</label></td>
+  <td><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('tr').remove()" aria-label="Remove condition">✕</button></td>
+</tr>
+{{end}}

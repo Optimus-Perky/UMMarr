@@ -1,0 +1,16 @@
+{{define "scan_result"}}
+{{if .Err}}<p class="notice" style="color:var(--warn)">Scan of {{.Scope}} failed: {{.Err}}</p>
+{{else}}<p class="notice">Scanned {{.Scope}}: imported {{.Movies}} movie(s), {{.Episodes}} episode(s), {{.Tracks}} track(s) for titles already in the library.</p>{{end}}
+{{if .Imports.Imports}}{{template "library_import_status" .Imports}}{{end}}
+<p class="notice"><a href="/library/scan-report">Scan report →</a> every folder a scan couldn't match, with a Match button for each.</p>
+{{end}}
+
+{{define "library_import_status"}}
+<div id="library-import-status"{{if .Running}} hx-get="/settings/scan-library/status" hx-trigger="every 3s" hx-swap="outerHTML"{{end}}>
+  {{range .Imports}}
+  {{$noun := "movie"}}{{$provider := "TMDB"}}{{$media := "a video file"}}{{if eq .Kind "series"}}{{$noun = "series"}}{{$media = "episode files"}}{{else if eq .Kind "music"}}{{$noun = "artist"}}{{$provider = "MusicBrainz"}}{{$media = "audio files"}}{{end}}
+  <p class="notice">{{.Path}}: {{if .Running}}{{if .Total}}matching new folder {{.Done}} of {{.Total}} on {{$provider}} - {{.Added}} {{$noun}}(s){{if .Albums}}, {{.Albums}} album(s){{end}} added so far{{else}}looking for new folders…{{end}}{{else if .LastError}}{{.Total}} new folder(s), {{.Added}} {{$noun}}(s){{if .Albums}} and {{.Albums}} album(s){{end}} added. Last error: {{.LastError}}{{else}}{{.Total}} new folder(s): {{.Added}} {{$noun}}(s){{if .Albums}} and {{.Albums}} album(s){{end}} added{{if .NoVideo}}, {{.NoVideo}} without {{$media}}{{end}}{{if .NoAlbums}}, {{.NoAlbums}} with tracks but no album folders{{end}}{{if .Unmatched}}, {{len .Unmatched}} not matched{{end}}{{if .Skipped}}; {{.Skipped}} loose file(s) at the top level skipped{{end}}.{{end}}</p>
+  {{if .Unmatched}}<details class="notice unmatched-folders"><summary>{{len .Unmatched}} folder(s) not matched on {{$provider}} - add them by hand</summary><ul>{{range .Unmatched}}<li>{{.}}</li>{{end}}</ul></details>{{end}}
+  {{end}}
+</div>
+{{end}}

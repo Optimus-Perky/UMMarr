@@ -1,0 +1,34 @@
+{{define "queue_results"}}
+{{range .Grabs}}
+<div class="result">
+  <div class="result-poster">{{slice .ReleaseTitle 0 1}}</div>
+  <div>
+    <div class="result-title">{{.ReleaseTitle}}</div>
+    <div class="result-meta">
+      <span class="result-year">{{.Indexer}}</span>
+      <span class="card-sub" title="When it was grabbed">{{.Grabbed}}</span>
+      {{if eq .Status "imported"}}<span class="chip chip-good">Imported</span>
+      {{else if eq .Status "needs_extraction"}}<span class="chip chip-warn">Needs extraction</span>
+      {{else if eq .Status "import_failed"}}<span class="chip chip-warn">Import failed</span>
+      {{else if eq .Status "failed"}}<span class="chip chip-warn">Failed</span>
+      {{else if eq .Status "removed"}}<span class="chip chip-off">Removed</span>
+      {{else}}<span class="chip chip-info">{{.Status}}</span>{{end}}
+      {{if and .Message (or (eq .Status "failed") (eq .Status "import_failed") (eq .Status "needs_extraction"))}}<span class="card-sub">{{.Message}}</span>{{end}}
+    </div>
+  </div>
+  <div class="result-actions">
+    {{if .Changed}}<span class="card-sub" title="When its status last changed">{{if eq .Status "imported"}}Imported{{else}}Updated{{end}} {{.Changed}}</span>{{end}}
+    {{if .SizeHuman}}<span class="card-sub">{{.SizeHuman}}</span>{{end}}
+    {{if or (eq .Status "needs_extraction") (eq .Status "import_failed")}}
+    <button class="btn btn-sm btn-ghost" hx-post="/activity/grabs/{{.ID}}/retry" hx-swap="none">Check again</button>
+    <a class="btn btn-sm btn-ghost" href="/activity/manual-import?grab={{.ID}}">Manual Import</a>
+    {{end}}
+    {{if ne .Status "removed"}}
+    <button class="btn btn-sm btn-ghost" type="button" data-grab-id="{{.ID}}" data-title="{{.ReleaseTitle}}" data-imported="{{if eq .Status "imported"}}1{{end}}" onclick="ummarrRemoveGrab(this.dataset.grabId, this.dataset.title, this.dataset.imported === '1')">Remove</button>
+    {{end}}
+  </div>
+</div>
+{{else}}
+<p class="notice">Nothing grabbed yet — find a release from a library page to get started.</p>
+{{end}}
+{{end}}

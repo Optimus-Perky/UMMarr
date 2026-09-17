@@ -1,0 +1,1 @@
+{{define "manual_import_tracks"}}{{if .IsAlbum}}<select name="track_{{.Index}}" aria-label="Track"><option value="">Choose track…</option>{{range .Tracks}}<option value="{{.ID}}"{{if .Selected}} selected{{end}}>{{.Label}}</option>{{end}}</select>{{end}}{{end}}

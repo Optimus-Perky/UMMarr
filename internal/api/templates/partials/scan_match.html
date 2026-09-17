@@ -1,0 +1,12 @@
+{{define "scan_match"}}
+<div class="guide-head">
+  <h2>Match folder - {{.Row.Name}}</h2>
+  <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+</div>
+<div class="guide-body">
+  <p class="notice">Pick the {{.Row.Provider}} entry for <code>{{.Row.Path}}</code>. UMMarr adds it with the default quality profile, points it at this folder and scans the files in.</p>
+  <input class="library-search" style="max-width:none;margin:8px 0" type="search" name="q" value="{{.Query}}" placeholder="Search {{.Row.Provider}}…" aria-label="Search {{.Row.Provider}}" hx-get="{{.SearchURL}}" hx-trigger="input changed delay:400ms, search" hx-target="#fix-match-results" hx-swap="innerHTML">
+  <div id="fix-match-notice">{{if .Notice}}<p class="notice">{{.Notice}}</p>{{end}}</div>
+  <div id="fix-match-results">{{template "fix_match_results" .Results}}</div>
+</div>
+{{end}}

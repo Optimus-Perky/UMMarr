@@ -1,0 +1,99 @@
+{{define "content"}}
+<div class="section-head"><h2>System</h2></div>
+<div class="dialog-tabs" role="tablist" style="margin-bottom:14px">
+  {{$tab := .Tab}}{{range .Tabs}}<a class="dialog-tab{{if eq . $tab}} active{{end}}" href="/system/{{.}}">{{.}}</a>{{end}}
+</div>
+{{if .Notice}}<p class="indexer-test ok">{{.Notice}}</p>{{end}}
+
+{{if eq .Tab "status"}}
+<div class="panel">
+  <div class="panel-head"><h2>About</h2></div>
+  <dl class="detail-list">
+    <dt>Version</dt><dd>{{.Commit}}{{if .Built}} · built {{.Built}}{{end}}</dd>
+    <dt>Go</dt><dd>{{.GoVersion}} · {{.OS}}/{{.Arch}}</dd>
+    <dt>Started</dt><dd>{{.StartedAt}} · up {{.Uptime}}</dd>
+    <dt>Database</dt><dd>{{.DBPath}}{{if .DBSize}} · {{.DBSize}}{{end}}</dd>
+    <dt>Library</dt><dd>{{.Movies}} movies · {{.Series}} series · {{.Artists}} artists · {{.Albums}} albums</dd>
+    <dt>Media analysis</dt><dd>{{.MediaAnalysis}}</dd>
+  </dl>
+</div>
+{{else if eq .Tab "health"}}
+<div class="panel">
+  <div class="panel-head"><h2>Health</h2><span class="notice">Checked {{.CheckedAt}}</span></div>
+  {{if .Issues}}
+  <table class="data-table">
+    <thead><tr><th>Level</th><th>Message</th><th>What to do</th></tr></thead>
+    <tbody>{{range .Issues}}<tr><td><span class="chip {{if eq .Level "error"}}chip-warn{{else}}chip-info{{end}}">{{.Level}}</span></td><td class="wrap">{{.Message}}</td><td class="wrap">{{.Fix}}</td></tr>{{end}}</tbody>
+  </table>
+  {{else}}<p class="indexer-test ok">No issues with your configuration.</p>{{end}}
+  <div class="form-row" style="margin-top:12px"><button class="btn btn-sm btn-ghost" hx-post="/system/tasks/Health check/run" hx-swap="none">Check again</button></div>
+</div>
+{{else if eq .Tab "tasks"}}
+<div class="panel">
+  <div class="panel-head"><h2>Scheduled tasks</h2></div>
+  <table class="data-table">
+    <thead><tr><th>Task</th><th>Interval</th><th>Last run</th><th>Duration</th><th>Next run</th><th></th></tr></thead>
+    <tbody>
+      {{range .Tasks}}
+      <tr>
+        <td><strong>{{.Name}}</strong><br><span class="notice">{{.Description}}</span>{{if .LastError}}<br><span class="setting-error">{{.LastError}}</span>{{end}}</td>
+        <td>{{.IntervalText}}</td><td>{{.LastRunText}}</td><td>{{.DurationText}}</td><td>{{.NextRunText}}</td>
+        <td>{{if .Running}}<span class="chip chip-info">Running</span>{{else}}<button class="btn btn-sm btn-ghost" hx-post="/system/tasks/{{.Name}}/run" hx-swap="none">Run now</button>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+</div>
+{{else if eq .Tab "logs"}}
+<div class="panel">
+  <div class="panel-head"><h2>Logs</h2>
+    <span class="section-actions">
+      <a class="btn btn-sm btn-ghost{{if eq .LogLevel ""}} active{{end}}" href="/system/logs">All</a>
+      <a class="btn btn-sm btn-ghost{{if eq .LogLevel "warn"}} active{{end}}" href="/system/logs?level=warn">Warnings+</a>
+      <a class="btn btn-sm btn-ghost{{if eq .LogLevel "error"}} active{{end}}" href="/system/logs?level=error">Errors</a>
+    </span>
+  </div>
+  {{if .Logs}}
+  <table class="data-table log-table">
+    <thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead>
+    <tbody>{{range .Logs}}<tr><td class="nowrap">{{.Time.Format "15:04:05"}}</td><td><span class="chip {{if eq .Level "error"}}chip-warn{{else if eq .Level "warn"}}chip-info{{else}}chip-muted{{end}}">{{.Level}}</span></td><td class="wrap mono">{{.Text}}</td></tr>{{end}}</tbody>
+  </table>
+  {{else}}<p class="notice">Nothing logged yet{{if .LogLevel}} at that level{{end}}. Only this run's lines are kept (the last 3000); the container's own log has everything.</p>{{end}}
+</div>
+{{else if eq .Tab "backups"}}
+<div class="panel">
+  <div class="panel-head"><h2>Backups</h2><span class="section-actions"><button class="btn btn-sm" hx-post="/system/backups" hx-swap="none">Back up now</button></span></div>
+  {{if .RestoreNote}}<p class="setting-warning">{{.RestoreNote}}</p>{{end}}
+  <p class="notice">A backup is a consistent copy of the database (library, settings, history). Restoring swaps it in and restarts UMMarr; the replaced database is kept beside it. A scheduled backup runs weekly and the newest four are kept.</p>
+  {{if .Backups}}
+  <table class="data-table">
+    <thead><tr><th>Backup</th><th>Taken</th><th>Size</th><th></th></tr></thead>
+    <tbody>
+      {{range .Backups}}
+      <tr>
+        <td class="mono">{{.Name}}</td><td>{{.When}}</td><td>{{.SizeHuman}}</td>
+        <td class="nowrap">
+          <a class="btn btn-sm btn-ghost" href="/system/backups/{{.Name}}/download">Download</a>
+          <button class="btn btn-sm btn-ghost" hx-post="/system/backups/{{.Name}}/restore" hx-swap="none" hx-confirm="Restore {{.Name}}? UMMarr restarts on it, and everything since it was taken is lost (the current database is kept beside it).">Restore</button>
+          <button class="btn btn-sm btn-danger" hx-delete="/system/backups/{{.Name}}" hx-swap="none" hx-confirm="Delete {{.Name}}?">Delete</button>
+        </td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}<p class="notice">No backups yet.</p>{{end}}
+</div>
+{{else if eq .Tab "updates"}}
+<div class="panel">
+  <div class="panel-head"><h2>Updates</h2><span class="section-actions"><button class="btn btn-sm btn-ghost" hx-post="/system/updates/check" hx-swap="none" hx-disabled-elt="this">Check now</button></span></div>
+  <dl class="detail-list">
+    <dt>Running</dt><dd>{{.Update.Current}}</dd>
+    {{if .Update.Error}}<dt>Check</dt><dd class="setting-error">{{.Update.Error}}</dd>
+    {{else if .Update.Latest}}<dt>Newest</dt><dd>{{.Update.Latest}} · {{.Update.LatestAt.Format "2 Jan 2006 15:04"}} · {{.Update.Message}}</dd>
+    <dt>Status</dt><dd>{{if .Update.Behind}}<span class="chip chip-info">Update available</span>{{else}}<span class="chip chip-good">Up to date</span>{{end}}</dd>{{end}}
+    <dt>Last checked</dt><dd>{{.UpdateChecked}}</dd>
+  </dl>
+  <p class="notice" style="margin-top:12px">UMMarr is built from source into its container, so an update is a rebuild: copy the new source to the server, then run <code>docker compose build && docker compose up -d --force-recreate</code> in the ummarr compose project.</p>
+</div>
+{{end}}
+{{end}}

@@ -1,0 +1,24 @@
+{{define "search_report"}}
+<div class="search-report">
+  {{if .Err}}
+  <p class="indexer-test failed">{{.Err}}</p>
+  {{else}}
+  {{range .Report.Grabbed}}<p class="indexer-test ok">Grabbed {{.Release}} from {{.Indexer}}{{if .For}} for {{.For}}{{end}}. <a href="/activity">Activity →</a></p>{{end}}
+  {{if not .Report.Grabbed}}
+    {{if eq .Report.Searched 0}}<p class="indexer-test failed">No indexers have automatic search enabled - turn it on in Settings → Indexers.</p>
+    {{else}}<p class="notice">Nothing grabbed: {{.Report.Releases}} release{{if ne .Report.Releases 1}}s{{end}} found{{if .Reasons}}. Most common reasons: {{.Reasons}}{{end}}. Use Find release to see every result.</p>{{end}}
+  {{end}}
+  {{range .Report.Errors}}<p class="notice" style="color:var(--warn)">{{if .Indexer}}{{.Indexer}}: {{end}}{{.Message}}</p>{{end}}
+  {{range .Report.GrabErrors}}<p class="indexer-test failed">{{.}}</p>{{end}}
+  {{end}}
+</div>
+{{end}}
+
+{{define "missing_search_status"}}
+<span id="{{.Action}}-{{.MediaType}}" class="missing-search-status"{{if .Running}} hx-get="/{{.Path}}/{{.Action}}" hx-trigger="every 3s" hx-swap="outerHTML"{{end}}>
+  {{if not .Available}}Automatic search isn't available.
+  {{else if .Running}}{{if .Total}}Searching {{.Done}} of {{.Total}} - {{.Grabbed}} grabbed so far{{else}}Starting…{{end}}
+  {{else if not .Finished.IsZero}}Searched {{.Total}}, grabbed {{.Grabbed}}{{if .LastError}} - {{.LastError}}{{end}}.{{if .Grabbed}} <a href="/activity">Activity →</a>{{end}}
+  {{end}}
+</span>
+{{end}}

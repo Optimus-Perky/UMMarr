@@ -1,0 +1,27 @@
+{{define "album_results"}}
+{{$artistID := .ArtistID}}
+<div class="guide-head">
+  <h2>{{.ArtistName}}</h2>
+  <span class="section-actions"><button class="btn btn-sm btn-ghost" hx-get="/music/artists/{{.ArtistID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this artist at the right MusicBrainz entry">Fix match</button>
+  <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </span>
+</div>
+<div class="guide-body">
+{{range .Results}}
+<form class="result" hx-post="/music/add-album" hx-target="this" hx-swap="outerHTML">
+  <div class="result-poster">{{slice .Title 0 1}}</div>
+  <div>
+    <div class="result-title">{{.Title}}</div>
+    <div class="result-meta"><span class="result-year">{{.PrimaryType}}</span></div>
+  </div>
+  <div class="result-actions">
+    <input type="hidden" name="release_group_mbid" value="{{.ID}}">
+    <input type="hidden" name="artist_id" value="{{$artistID}}">
+    <button class="btn btn-sm" type="submit">Add</button>
+  </div>
+</form>
+{{else}}
+<p class="notice">No albums found for this artist.</p>
+{{end}}
+</div>
+{{end}}

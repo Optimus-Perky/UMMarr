@@ -1,0 +1,26 @@
+{{define "artist_results"}}
+{{$rf := .RootFolders}}
+{{$qp := .QualityProfiles}}
+{{range .Results}}
+<form class="result" hx-post="/music/add-artist" hx-target="this" hx-swap="outerHTML">
+  <div class="result-poster">{{slice .Name 0 1}}</div>
+  <div>
+    <div class="result-title">{{.Name}}</div>
+    {{if .Disambiguation}}<div class="result-meta"><span class="result-year">{{.Disambiguation}}</span></div>{{end}}
+  </div>
+  <div class="result-actions">
+    <input type="hidden" name="mbid" value="{{.ID}}">
+    <select class="select" name="root_folder_id">
+      {{range $rf}}<option value="{{.ID}}">{{.Path}}</option>{{end}}
+    </select>
+    <select class="select" name="quality_profile_id">
+      {{range $qp}}<option value="{{.ID}}"{{if .IsDefault}} selected{{end}}>{{.Name}}</option>{{end}}
+    </select>
+    <button class="btn btn-sm" type="submit">Add</button>
+  </div>
+</form>
+{{else}}
+{{if .Err}}<p class="notice" style="color:var(--warn)">Search failed: {{.Err}}</p>
+{{else}}<p class="notice">No results.</p>{{end}}
+{{end}}
+{{end}}

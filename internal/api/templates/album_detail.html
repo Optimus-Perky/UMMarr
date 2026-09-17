@@ -1,0 +1,72 @@
+{{define "content"}}
+{{$album := .Album}}
+<div class="detail-head">
+  {{if $album.PosterURL}}<div class="detail-poster" style="background-image:url('{{$album.PosterURL}}')"></div>
+  {{else}}<div class="detail-poster"></div>{{end}}
+  <div>
+    <div class="detail-title">
+      <h1>{{$album.Title}}</h1>
+      {{template "monitored_chip" .MonitoredChip}}
+    </div>
+    <div class="detail-badges">
+      {{if $album.Year.Valid}}<span class="badge">{{$album.Year.Int64}}</span>{{end}}
+      <span class="badge">{{$album.AlbumType}}</span>
+      {{range .Ratings}}<span class="badge">{{.Provider}} {{.Value}}</span>{{end}}
+    </div>
+    <div class="detail-meta">
+      <div class="field"><span class="label">Artist</span>{{if $album.ArtistID.Valid}}<a href="/music/artists/{{$album.ArtistID.Int64}}/albums">{{$album.ArtistName}}</a>{{else}}{{$album.ArtistName}}{{end}}</div>
+      {{if $album.Path.String}}<div class="field"><span class="label">Path</span>{{$album.Path.String}}</div>{{end}}
+      {{if .QualityProfileName}}<div class="field"><span class="label">Quality Profile</span>{{.QualityProfileName}}</div>{{end}}
+      {{if $album.Genres}}<div class="field"><span class="label">Genres</span>{{range $i, $g := $album.Genres}}{{if $i}}, {{end}}{{$g}}{{end}}</div>{{end}}
+    </div>
+    {{if $album.Overview.String}}<p class="detail-overview">{{$album.Overview.String}}</p>{{end}}
+    <div class="detail-actions"><button class="btn btn-sm btn-ghost" hx-post="/music/albums/{{$album.ID}}/refresh-metadata" hx-target="#album-metadata-result" hx-swap="innerHTML" hx-disabled-elt="this" title="Fetch the album from MusicBrainz again">Refresh metadata</button><button class="btn btn-sm btn-ghost" hx-get="/music/albums/{{$album.ID}}/metadata" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Where the details came from">Metadata</button><button class="btn btn-sm btn-ghost" hx-get="/music/albums/{{$album.ID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this album at the right MusicBrainz release group">Fix match</button><span id="album-metadata-result"></span></div>
+    {{if .HasIndexer}}
+    <button class="btn btn-sm" style="margin-top:12px" hx-get="/music/albums/{{$album.ID}}/releases" hx-target="#release-dialog-body" hx-swap="innerHTML">Find release</button>
+    <button class="btn btn-sm btn-ghost" style="margin-top:12px" hx-post="/music/albums/{{$album.ID}}/search" hx-target="#search-report" hx-swap="innerHTML" title="Search and grab the best release UMMarr would accept">Search Album</button>
+    <div id="search-report"></div>
+    {{end}}
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head">
+    <h2>Tracks</h2>
+    {{if .Tracks}}
+    <div class="col-picker" data-for="tracks">
+      <button class="icon-btn" type="button" title="Table options">{{template "icon_gear"}}</button>
+      <div class="col-picker-panel" hidden>
+        <label><input type="checkbox" data-col="duration" checked> Duration</label>
+        <label><input type="checkbox" data-col="group" checked> Release Group</label>
+        <label><input type="checkbox" data-col="quality" checked> Quality</label>
+        <label><input type="checkbox" data-col="audio" checked> Audio</label>
+      </div>
+    </div>
+    {{end}}
+  </div>
+  {{if .Tracks}}
+  {{$albumID := $album.ID}}
+  {{$hasIndexer := .HasIndexer}}
+  <table class="data-table" data-table-id="tracks">
+    <thead><tr><th>#</th><th>Title</th><th data-col="duration">Duration</th><th data-col="group">Release Group</th><th data-col="quality">Quality</th><th data-col="audio">Audio</th><th>Status</th><th></th></tr></thead>
+    <tbody>
+      {{range .Tracks}}
+      <tr>
+        <td>{{.TrackNumber}}</td>
+        <td>{{.Title}}</td>
+        <td data-col="duration">{{.Duration}}</td>
+        <td data-col="group">{{.ReleaseGroup}}</td>
+        <td data-col="quality">{{if .Quality}}<span class="chip chip-info">{{.Quality}}</span>{{end}}</td>
+        <td data-col="audio">{{.Audio}}</td>
+        <td>{{if .HasFile}}<span class="chip chip-good">{{.FileStatus}}</span>{{else}}<span class="chip chip-warn">{{.FileStatus}}</span>{{end}}</td>
+        <td>{{if $hasIndexer}}<button class="btn btn-sm btn-ghost" hx-get="/music/albums/{{$albumID}}/tracks/{{.ID}}/releases" hx-target="#release-dialog-body" hx-swap="innerHTML">Find release</button>{{end}}</td>
+      </tr>
+      {{if $hasIndexer}}<tr><td colspan="8" id="track-releases-{{.ID}}"></td></tr>{{end}}
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="notice">No track metadata yet.</p>
+  {{end}}
+</div>
+{{end}}

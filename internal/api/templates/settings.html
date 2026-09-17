@@ -1,0 +1,976 @@
+{{define "content"}}
+<div class="topbar"><h2 style="flex:1">Settings</h2></div>
+<div class="dialog-tabs" role="tablist" style="margin-bottom:14px">
+  {{$tab := .Tab}}{{range .Tabs}}<a class="dialog-tab{{if eq .Slug $tab}} active{{end}}" href="/settings/{{.Slug}}">{{.Label}}</a>{{end}}
+</div>
+
+{{if eq .Tab "general"}}
+<div class="panel" data-section="account">
+  <div class="panel-head"><h2>Account</h2></div>
+  <p class="notice">If login isn't currently enabled at all, saving credentials here won't turn it on until you restart UMMarr (with UMMARR_AUTH_PASSWORD set to anything).</p>
+  <form class="form-row" hx-post="/settings/account" hx-target="body">
+    <input type="text" name="username" value="{{.AuthUsername}}" placeholder="Username" required autocomplete="username">
+    <input type="password" name="password" placeholder="New password (leave blank to keep current)" autocomplete="new-password">
+    <button class="btn btn-sm" type="submit">Save account</button>
+  </form>
+</div>
+
+<div class="panel" data-section="general" id="general">
+  <div class="panel-head"><h2>General</h2></div>
+  <div class="setting-row">
+    <div class="setting-label">API Key</div>
+    <div class="setting-control">
+      <div class="api-key-row">
+        <input type="password" id="api-key" readonly autocomplete="off" placeholder="••••••••••••••••••••••••••••••••" aria-label="API key">
+        <button type="button" class="btn btn-sm btn-ghost" id="api-key-show">Show</button>
+        <button type="button" class="btn btn-sm btn-ghost" id="api-key-copy">Copy</button>
+        <button type="button" class="btn btn-sm btn-ghost" hx-post="/settings/api-key/regenerate" hx-target="#api-key-result" hx-swap="innerHTML" hx-confirm="Make a new API key? Prowlarr stops syncing until it's given the new one.">Regenerate</button>
+      </div>
+      <span class="setting-help">Prowlarr uses this key to add its indexers to UMMarr. In Prowlarr, open Settings → Apps → + → Radarr and enter: <strong>Prowlarr Server</strong> - the address UMMarr reaches Prowlarr at, e.g. <code>http://media-server:9696</code>; <strong>Radarr Server</strong> - UMMarr's address, e.g. <code>http://media-server:8081</code>; <strong>API Key</strong> - this key. Under Show Advanced, tick <strong>Movies, TV and Audio</strong> in Sync Categories so the indexers are used for all three.</span>
+      <div id="api-key-result"></div>
+    </div>
+  </div>
+</div>
+
+<div class="panel" data-section="host" id="host">
+  <div class="panel-head"><h2>Host</h2></div>
+  <form class="mm-form" hx-post="/settings/host" hx-target="#host-result" hx-swap="innerHTML">
+    <div class="setting-row">
+      <div class="setting-label">URL Base</div>
+      <div class="setting-control">
+        <input type="text" name="url_base" value="{{.Host.URLBase}}" placeholder="/ummarr">
+        <span class="setting-help">For a reverse proxy that serves UMMarr under a path, e.g. <code>/ummarr</code>. Leave blank to serve from the root. Prowlarr's address for UMMarr then includes it.</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Enable SSL</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="ssl_enabled"{{if .Host.SSLEnabled}} checked{{end}}> Also listen with HTTPS, using the certificate below</label></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">SSL Port</div>
+      <div class="setting-control"><input type="number" name="ssl_port" value="{{.Host.SSLPort}}" min="1" max="65535"><span class="setting-help">Inside the container; publish it in the compose file (e.g. 9898:9898).</span></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">SSL Cert Path</div>
+      <div class="setting-control"><input type="text" name="ssl_cert_path" value="{{.Host.SSLCertPath}}" placeholder="/config/ssl/fullchain.pem"></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">SSL Key Path</div>
+      <div class="setting-control"><input type="text" name="ssl_key_path" value="{{.Host.SSLKeyPath}}" placeholder="/config/ssl/privkey.pem"></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Use Proxy</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="proxy_enabled"{{if .Host.ProxyEnabled}} checked{{end}}> Send outbound requests (indexers, TMDB, MusicBrainz, notifications) through a proxy</label></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Proxy URL</div>
+      <div class="setting-control"><input type="text" name="proxy_url" value="{{.Host.ProxyURL}}" placeholder="http://proxy:3128"><span class="setting-help">HTTP or HTTPS proxies; SOCKS isn't supported.</span></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Bypass Proxy for</div>
+      <div class="setting-control"><input type="text" name="proxy_bypass" value="{{.Host.ProxyBypass}}"><span class="setting-help">Hosts and CIDR ranges reached directly, comma-separated - keep your LAN here so download clients and Plex aren't proxied.</span></div>
+    </div>
+    <div class="form-row"><button class="btn btn-sm" type="submit">Save host settings</button><span class="notice">Changes apply when UMMarr restarts.</span></div>
+    <div id="host-result"></div>
+  </form>
+</div>
+
+<script>
+// The key is only fetched when asked for, so it never sits in the page.
+(function () {
+  var input = document.getElementById('api-key');
+  var show = document.getElementById('api-key-show');
+  var copy = document.getElementById('api-key-copy');
+  if (!input || !show || !copy) return;
+  function load() {
+    return fetch('/settings/api-key', {credentials: 'same-origin'}).then(function (r) { return r.text(); });
+  }
+  show.addEventListener('click', function () {
+    if (input.type === 'text') { input.type = 'password'; input.value = ''; show.textContent = 'Show'; return; }
+    load().then(function (key) { input.value = key; input.type = 'text'; show.textContent = 'Hide'; });
+  });
+  copy.addEventListener('click', function () {
+    load().then(function (key) {
+      var done = function () { copy.textContent = 'Copied'; setTimeout(function () { copy.textContent = 'Copy'; }, 1500); };
+      if (navigator.clipboard && window.isSecureContext) { navigator.clipboard.writeText(key).then(done); return; }
+      var wasType = input.type, wasValue = input.value;
+      input.type = 'text'; input.value = key; input.select(); document.execCommand('copy');
+      input.type = wasType; input.value = wasType === 'text' ? key : wasValue; done();
+    });
+  });
+})();
+</script>
+{{end}}
+
+{{if eq .Tab "indexers"}}
+<div class="panel" data-section="indexers" id="indexers">
+  <div class="panel-head">
+    <h2>Indexers</h2>
+    <div class="mm-actions">
+      <button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/indexers/test-all" hx-target="#indexer-test-all" hx-swap="innerHTML">Test All Indexers</button>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="document.getElementById('indexer-manage-dialog').showModal()">Manage Indexers</button>
+    </div>
+  </div>
+  {{if .IndexerSyncHint}}<p class="setting-warning">Prowlarr has only synced movie categories. In Prowlarr, open Settings → Apps → the Radarr app for UMMarr, and tick TV and Audio in Sync Categories as well as Movies, so these indexers are used for TV and music too.</p>{{end}}
+  <div id="indexer-test-all"></div>
+  <div class="indexer-cards">
+    {{range .Indexers}}
+    <button type="button" class="indexer-card" hx-get="/settings/indexers/{{.ID}}/edit" hx-target="#indexer-dialog-body" hx-swap="innerHTML">
+      <span class="indexer-name">{{.Name}}</span>
+      <span class="indexer-chips">
+        <span class="chip {{if .EnableRSS}}chip-good{{else}}chip-off{{end}}">RSS</span>
+        <span class="chip {{if .EnableAutomaticSearch}}chip-good{{else}}chip-off{{end}}">Automatic Search</span>
+        <span class="chip {{if .EnableInteractiveSearch}}chip-good{{else}}chip-off{{end}}">Interactive Search</span>
+      </span>
+      <span class="indexer-chips">
+        <span class="chip chip-muted">Priority: {{.Priority}}</span>
+        {{if .GrabLimit}}<span class="chip chip-muted">Grab limit: {{.GrabLimit}}/day</span>{{end}}
+        {{if .Media}}<span class="chip chip-muted">{{.Media}}</span>{{end}}
+        {{if .Synced}}<span class="chip chip-info">Prowlarr</span>{{end}}
+        {{if .Converted}}<span class="chip chip-info">From old Prowlarr connection</span>{{end}}
+      </span>
+      {{if .RestingUntil}}<span class="indexer-error">{{.LastError}} - not used until {{.RestingUntil}}</span>{{end}}
+    </button>
+    {{end}}
+    <button type="button" class="indexer-card indexer-add" onclick="document.getElementById('indexer-add-dialog').showModal()" aria-label="Add indexer">+</button>
+  </div>
+  <form class="mm-form indexer-options" hx-post="/settings/indexers/options" hx-target="#indexer-options-result" hx-swap="innerHTML">
+    <section class="mm-section" data-section="indexer-options">
+      <h3>Options</h3>
+      <div class="setting-row">
+        <div class="setting-label">Minimum Age</div>
+        <div class="setting-control">
+          <span class="input-unit"><input type="number" min="0" name="minimum_age" value="{{.IndexerOptions.MinimumAge}}"><span>minutes</span></span>
+          <span class="setting-help">Usenet only: minimum age in minutes of NZBs before they are grabbed. Use this to give new releases time to propagate to your usenet provider.</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Retention</div>
+        <div class="setting-control">
+          <span class="input-unit"><input type="number" min="0" name="retention" value="{{.IndexerOptions.Retention}}"><span>days</span></span>
+          <span class="setting-help">Usenet only: set to zero for unlimited retention.</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Maximum Size</div>
+        <div class="setting-control">
+          <span class="input-unit"><input type="number" min="0" name="maximum_size" value="{{.IndexerOptions.MaximumSize}}"><span>MB</span></span>
+          <span class="setting-help">Maximum size for a release to be grabbed in MB. Set to zero for unlimited.</span>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Prefer Indexer Flags</div>
+        <div class="setting-control">
+          <label class="setting-check"><input type="checkbox" name="prefer_indexer_flags"{{if .IndexerOptions.PreferIndexerFlags}} checked{{end}}> Prioritize releases with special flags (freeleech, double upload, internal)</label>
+        </div>
+      </div>
+      <div class="setting-row">
+        <div class="setting-label">Availability Delay</div>
+        <div class="setting-control">
+          <span class="input-unit"><input type="number" name="availability_delay" value="{{.IndexerOptions.AvailabilityDelay}}"><span>days</span></span>
+          <span class="setting-help">Amount of time before or after the available date to search for a movie.</span>
+        </div>
+      </div>
+      <div class="setting-row advanced">
+        <div class="setting-label">RSS Sync Interval</div>
+        <div class="setting-control">
+          <span class="input-unit"><input type="number" min="0" max="120" name="rss_sync_interval" value="{{.IndexerOptions.RSSSyncInterval}}"><span>minutes</span></span>
+          <span class="setting-help">Interval in minutes. Set to zero to disable (this will stop all automatic release grabbing).</span>
+          <span class="setting-warning">This will apply to all indexers, please follow the rules set forth by them.</span>
+          {{if .IndexerOptions.LastRSSSync.Valid}}<span class="setting-help">Last run {{.IndexerOptions.LastRSSSync.Time.Local.Format "15:04 on 2 Jan"}}: {{.IndexerOptions.LastRSSResult}}</span>{{end}}
+          {{if gt .IndexerOptions.RSSSyncInterval 0}}<span><button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/indexers/rss-sync" hx-target="#rss-sync-result" hx-swap="innerHTML" hx-confirm="Run RSS sync now? UMMarr grabs any release it would accept.">Run RSS Sync now</button></span><div id="rss-sync-result"></div>{{end}}
+        </div>
+      </div>
+      <div class="setting-row advanced">
+        <div class="setting-label">Whitelisted Subtitle Tags</div>
+        <div class="setting-control">
+          <input type="text" name="whitelisted_hardcoded_subs" value="{{.IndexerOptions.WhitelistedHardcodedSubs}}" placeholder="e.g. nlsub, ensub">
+          <span class="setting-help">Subtitle tags set here will not be considered hardcoded. Separate them with commas.</span>
+        </div>
+      </div>
+      <div class="setting-row advanced">
+        <div class="setting-label">Allow Hardcoded Subs</div>
+        <div class="setting-control">
+          <label class="setting-check"><input type="checkbox" name="allow_hardcoded_subs"{{if .IndexerOptions.AllowHardcodedSubs}} checked{{end}}> Detected hardcoded subs will be automatically downloaded</label>
+        </div>
+      </div>
+    </section>
+    <div id="indexer-options-result"></div>
+    <div class="mm-actions options-actions">
+      <button class="btn btn-sm btn-ghost" type="button" onclick="var f = this.closest('form'); f.toggleAttribute('data-show-advanced'); this.textContent = f.hasAttribute('data-show-advanced') ? 'Hide advanced' : 'Show advanced'">Show advanced</button>
+      <button class="btn btn-sm" type="submit">Save options</button>
+    </div>
+  </form>
+</div>
+
+<dialog id="indexer-add-dialog" class="guide" onclick="if (event.target === this) this.close()">
+  <div class="guide-head">
+    <h2>Add Indexer</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <p class="notice">UMMarr uses the generic indexer types, as Radarr does. Prowlarr can add its indexers for you: in Prowlarr, add a Radarr app with UMMarr's address and API key (Settings → General).</p>
+    <h3>Usenet</h3>
+    <div class="indexer-cards">
+      <button type="button" class="indexer-card" hx-get="/settings/indexers/new?implementation=Newznab" hx-target="#indexer-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Newznab</span><span class="card-sub">Generic Newznab</span></button>
+    </div>
+    <h3>Torrents</h3>
+    <div class="indexer-cards">
+      <button type="button" class="indexer-card" hx-get="/settings/indexers/new?implementation=Torznab" hx-target="#indexer-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Torznab</span><span class="card-sub">Generic Torznab</span></button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="indexer-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()"><div id="indexer-dialog-body"></div></dialog>
+
+<dialog id="indexer-manage-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()">
+  <form hx-post="/settings/indexers/bulk" hx-target="#indexer-manage-result" hx-swap="innerHTML">
+    <div class="guide-head">
+      <h2>Manage Indexers</h2>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+    </div>
+    <div class="guide-body">
+      <table class="root-folders">
+        <tr><th></th><th>Name</th><th>Implementation</th><th>RSS</th><th>Automatic Search</th><th>Interactive Search</th><th>Priority</th></tr>
+        {{range .Indexers}}
+        <tr><td><input type="checkbox" name="ids" value="{{.ID}}" aria-label="Select {{.Name}}"></td><td>{{.Name}}</td><td>{{.Implementation}}</td><td>{{if .EnableRSS}}Enabled{{else}}Disabled{{end}}</td><td>{{if .EnableAutomaticSearch}}Enabled{{else}}Disabled{{end}}</td><td>{{if .EnableInteractiveSearch}}Enabled{{else}}Disabled{{end}}</td><td>{{.Priority}}</td></tr>
+        {{else}}
+        <tr><td colspan="7" class="notice">No indexers yet.</td></tr>
+        {{end}}
+      </table>
+      <div class="manage-fields">
+        <label>RSS <select name="enable_rss"><option value="">No change</option><option value="enable">Enabled</option><option value="disable">Disabled</option></select></label>
+        <label>Automatic Search <select name="enable_automatic_search"><option value="">No change</option><option value="enable">Enabled</option><option value="disable">Disabled</option></select></label>
+        <label>Interactive Search <select name="enable_interactive_search"><option value="">No change</option><option value="enable">Enabled</option><option value="disable">Disabled</option></select></label>
+        <label>Priority <input type="number" name="priority" min="1" max="50" placeholder="No change"></label>
+      </div>
+      <div id="indexer-manage-result"></div>
+    </div>
+    <div class="dialog-foot">
+      <button class="btn btn-sm btn-danger" type="button" hx-post="/settings/indexers/bulk" hx-include="closest form" hx-vals='{"action": "delete"}' hx-target="#indexer-manage-result" hx-swap="innerHTML" hx-confirm="Delete the selected indexers?">Delete</button>
+      <span class="dialog-foot-spacer"></span>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn btn-sm" type="submit">Apply Changes</button>
+    </div>
+  </form>
+</dialog>
+{{end}}
+
+<script>
+// Loading an indexer's form into the dialog opens it (and closes Add Indexer).
+(function () {
+  if (window.ummarrIndexerDialogs) return;
+  window.ummarrIndexerDialogs = true;
+  document.body.addEventListener('htmx:afterSwap', function (e) {
+    if (e.detail.target && e.detail.target.id === 'import-list-dialog-body') {
+      var addL = document.getElementById('import-list-add-dialog'); if (addL && addL.open) addL.close();
+      var lDialog = document.getElementById('import-list-dialog'); if (lDialog && !lDialog.open) lDialog.showModal();
+      return;
+    }
+    if (e.detail.target && e.detail.target.id === 'notification-dialog-body') {
+      var addN = document.getElementById('notification-add-dialog'); if (addN && addN.open) addN.close();
+      var nDialog = document.getElementById('notification-dialog'); if (nDialog && !nDialog.open) nDialog.showModal();
+      return;
+    }
+    if (e.detail.target && e.detail.target.id === 'download-client-dialog-body') {
+      var addDC = document.getElementById('download-client-add-dialog'); if (addDC && addDC.open) addDC.close();
+      var dcDialog = document.getElementById('download-client-dialog'); if (dcDialog && !dcDialog.open) dcDialog.showModal();
+      return;
+    }
+    if (!e.detail.target || e.detail.target.id !== 'indexer-dialog-body') return;
+    var add = document.getElementById('indexer-add-dialog');
+    if (add && add.open) add.close();
+    var dialog = document.getElementById('indexer-dialog');
+    if (dialog && !dialog.open) dialog.showModal();
+  });
+})();
+</script>
+
+{{if eq .Tab "download-clients"}}
+<div class="panel" data-section="download-clients" id="download-clients">
+  <div class="panel-head"><h2>Download Clients</h2></div>
+  <div class="indexer-cards">
+    {{range .DownloadClients}}
+    <button type="button" class="indexer-card"{{if .FromEnv}} onclick="alert('This Deluge comes from the .env file. Add a download client here to manage it in Settings instead.')"{{else}} hx-get="/settings/download-clients/{{.ID}}/edit" hx-target="#download-client-dialog-body" hx-swap="innerHTML"{{end}}>
+      <span class="indexer-name">{{.Name}}</span>
+      <span class="indexer-chips">
+        <span class="chip {{if .Enabled}}chip-good{{else}}chip-off{{end}}">{{if .Enabled}}Enabled{{else}}Disabled{{end}}</span>
+        <span class="chip chip-info">{{.Protocol}}</span>
+        <span class="chip chip-muted">{{.Label}}</span>
+        <span class="chip chip-muted">Priority: {{.Priority}}</span>
+        {{if .FromEnv}}<span class="chip chip-info">From .env</span>{{end}}
+      </span>
+    </button>
+    {{end}}
+    <button type="button" class="indexer-card indexer-add" onclick="document.getElementById('download-client-add-dialog').showModal()" aria-label="Add download client">+</button>
+  </div>
+  <p class="notice">Torrent releases go to the enabled torrent client with the highest priority, usenet releases to the usenet one. Without a client for a protocol, its releases show in searches but can't be grabbed.</p>
+  <form class="mm-form" hx-post="/settings/download-handling" hx-target="#download-handling-result" hx-swap="innerHTML">
+    <section class="mm-section" data-section="failed-download-handling">
+      <h3>Failed Download Handling</h3>
+      <div class="setting-row">
+        <div class="setting-label">Redownload</div>
+        <div class="setting-control">
+          <label class="setting-check"><input type="checkbox" name="redownload_failed"{{if .DownloadHandling.RedownloadFailed}} checked{{end}}> Automatically search for and attempt to download a different release</label>
+          <span class="setting-help">When a download client reports a download failed, its release is blocklisted (Activity → Blocklist) so it isn't grabbed again. Remove Failed on each client decides whether it's also deleted from the client.</span>
+        </div>
+      </div>
+      <div id="download-handling-result"></div>
+      <div class="form-row"><button class="btn btn-sm" type="submit">Save</button></div>
+    </section>
+  </form>
+</div>
+
+<dialog id="download-client-add-dialog" class="guide" onclick="if (event.target === this) this.close()">
+  <div class="guide-head">
+    <h2>Add Download Client</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <h3>Usenet</h3>
+    <div class="indexer-cards">
+      <button type="button" class="indexer-card" hx-get="/settings/download-clients/new?implementation=sabnzbd" hx-target="#download-client-dialog-body" hx-swap="innerHTML"><span class="indexer-name">SABnzbd</span><span class="card-sub">NZB downloader</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/download-clients/new?implementation=nzbget" hx-target="#download-client-dialog-body" hx-swap="innerHTML"><span class="indexer-name">NZBGet</span><span class="card-sub">JSON-RPC</span></button>
+    </div>
+    <h3>Torrents</h3>
+    <div class="indexer-cards">
+      <button type="button" class="indexer-card" hx-get="/settings/download-clients/new?implementation=deluge" hx-target="#download-client-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Deluge</span><span class="card-sub">Web UI JSON-RPC</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/download-clients/new?implementation=qbittorrent" hx-target="#download-client-dialog-body" hx-swap="innerHTML"><span class="indexer-name">qBittorrent</span><span class="card-sub">Web API v2</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/download-clients/new?implementation=transmission" hx-target="#download-client-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Transmission</span><span class="card-sub">RPC</span></button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="download-client-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()"><div id="download-client-dialog-body"></div></dialog>
+{{end}}
+
+{{if eq .Tab "connect"}}
+<div class="panel" data-section="connect" id="connect">
+  <div class="panel-head"><h2>Connect</h2></div>
+  <div class="indexer-cards">
+    {{range .Notifications}}
+    <button type="button" class="indexer-card" hx-get="/settings/notifications/{{.ID}}/edit" hx-target="#notification-dialog-body" hx-swap="innerHTML">
+      <span class="indexer-name">{{.Name}}</span>
+      <span class="indexer-chips">
+        <span class="chip {{if .Enabled}}chip-good{{else}}chip-off{{end}}">{{if .Enabled}}Enabled{{else}}Disabled{{end}}</span>
+        <span class="chip chip-muted">{{.Label}}</span>
+      </span>
+      <span class="card-sub">{{if .Events}}On: {{.Events}}{{else}}No events selected{{end}}</span>
+    </button>
+    {{end}}
+    <button type="button" class="indexer-card indexer-add" onclick="document.getElementById('notification-add-dialog').showModal()" aria-label="Add connection">+</button>
+  </div>
+  <p class="notice">Notifications about grabs, imports, upgrades, failures and health, as Sonarr's Connect. Plex connections refresh the right library after files change.</p>
+</div>
+
+<dialog id="notification-add-dialog" class="guide" onclick="if (event.target === this) this.close()">
+  <div class="guide-head">
+    <h2>Add Connection</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <div class="indexer-cards">
+      <button type="button" class="indexer-card" hx-get="/settings/notifications/new?implementation=discord" hx-target="#notification-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Discord</span><span class="card-sub">Channel webhook</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/notifications/new?implementation=plex" hx-target="#notification-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Plex Media Server</span><span class="card-sub">Refresh libraries</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/notifications/new?implementation=email" hx-target="#notification-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Email</span><span class="card-sub">SMTP</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/notifications/new?implementation=pushover" hx-target="#notification-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Pushover</span><span class="card-sub">Push notifications</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/notifications/new?implementation=telegram" hx-target="#notification-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Telegram</span><span class="card-sub">Bot message</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/notifications/new?implementation=webhook" hx-target="#notification-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Webhook</span><span class="card-sub">JSON to any URL</span></button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="notification-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()"><div id="notification-dialog-body"></div></dialog>
+{{end}}
+
+{{if eq .Tab "import-lists"}}
+<div class="panel" data-section="import-lists" id="import-lists">
+  <div class="panel-head"><h2>Import Lists</h2><div class="mm-actions"><button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/import-lists/sync" hx-target="#import-list-sync-result" hx-swap="innerHTML">Sync all now</button></div></div>
+  <div id="import-list-sync-result"></div>
+  <div class="indexer-cards">
+    {{range .ImportLists}}
+    <button type="button" class="indexer-card" hx-get="/settings/import-lists/{{.ID}}/edit" hx-target="#import-list-dialog-body" hx-swap="innerHTML">
+      <span class="indexer-name">{{.Name}}</span>
+      <span class="indexer-chips">
+        <span class="chip {{if .Enabled}}chip-good{{else}}chip-off{{end}}">{{if .Enabled}}Enabled{{else}}Disabled{{end}}</span>
+        <span class="chip chip-info">{{.MediaLabel}}</span>
+        <span class="chip chip-muted">{{.Label}}</span>
+        {{if not .AutoAdd}}<span class="chip chip-muted">Preview only</span>{{end}}
+      </span>
+      <span class="card-sub">Last sync {{.LastSyncText}}{{if .LastResult}}: {{.LastResult}}{{end}}</span>
+    </button>
+    {{end}}
+    <button type="button" class="indexer-card indexer-add" onclick="document.getElementById('import-list-add-dialog').showModal()" aria-label="Add import list">+</button>
+  </div>
+  <p class="notice">Lists are synced every 6 hours (System → Tasks → Import list sync). Titles on the exclusion list are never added.</p>
+  <h3 style="margin-top:14px">Exclusions</h3>
+  <table class="settings-table">
+    {{range .Exclusions}}
+    <tr><td>{{.Title}}{{if not .Title}}TMDB {{.TMDBID}}{{end}} <span class="chip chip-muted">{{if eq .MediaType "movie"}}Movie{{else}}TV{{end}}</span> <span class="card-sub">TMDB {{.TMDBID}}</span></td><td style="text-align:right"><button class="btn btn-sm btn-ghost" type="button" hx-delete="/settings/import-lists/exclusions/{{.ID}}" hx-target="body">Remove</button></td></tr>
+    {{else}}
+    <tr><td colspan="2" class="notice">Nothing excluded yet. Deleting a movie or series through the API with addImportExclusion=true adds it here.</td></tr>
+    {{end}}
+  </table>
+  <form class="form-row" hx-post="/settings/import-lists/exclusions" hx-target="body">
+    <select class="select" name="media_type"><option value="movie">Movie</option><option value="series">TV</option></select>
+    <input type="text" name="tmdb_id" placeholder="TMDB id" required style="max-width:120px">
+    <input type="text" name="title" placeholder="Title (for the list)">
+    <button class="btn btn-sm" type="submit">Exclude</button>
+  </form>
+</div>
+
+<dialog id="import-list-add-dialog" class="guide" onclick="if (event.target === this) this.close()">
+  <div class="guide-head">
+    <h2>Add Import List</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <h3>TMDB</h3>
+    <div class="indexer-cards">
+      <button type="button" class="indexer-card" hx-get="/settings/import-lists/new?implementation=tmdb_list" hx-target="#import-list-dialog-body" hx-swap="innerHTML"><span class="indexer-name">TMDB List</span><span class="card-sub">Any public list by id</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/import-lists/new?implementation=tmdb_popular" hx-target="#import-list-dialog-body" hx-swap="innerHTML"><span class="indexer-name">TMDB Popular</span><span class="card-sub">Most popular right now</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/import-lists/new?implementation=tmdb_top_rated" hx-target="#import-list-dialog-body" hx-swap="innerHTML"><span class="indexer-name">TMDB Top Rated</span><span class="card-sub">Highest rated</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/import-lists/new?implementation=tmdb_trending" hx-target="#import-list-dialog-body" hx-swap="innerHTML"><span class="indexer-name">TMDB Trending</span><span class="card-sub">This week</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/import-lists/new?implementation=tmdb_discover" hx-target="#import-list-dialog-body" hx-swap="innerHTML"><span class="indexer-name">TMDB Discover</span><span class="card-sub">By genre, rating, year</span></button>
+    </div>
+    <h3>Other</h3>
+    <div class="indexer-cards">
+      <button type="button" class="indexer-card" hx-get="/settings/import-lists/new?implementation=plex_rss" hx-target="#import-list-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Plex Watchlist</span><span class="card-sub">RSS feed</span></button>
+      <button type="button" class="indexer-card" hx-get="/settings/import-lists/new?implementation=trakt_list" hx-target="#import-list-dialog-body" hx-swap="innerHTML"><span class="indexer-name">Trakt List</span><span class="card-sub">Public list, your API id</span></button>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="import-list-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()"><div id="import-list-dialog-body"></div></dialog>
+{{end}}
+
+
+{{if eq .Tab "custom-formats"}}
+<div class="panel" data-section="custom-formats" id="custom-formats">
+  <div class="panel-head"><h2>Custom Formats</h2></div>
+  <p class="notice">Named sets of conditions a release either meets or doesn't - release group, source, resolution, size, language and so on. Each quality profile scores them (Settings → Profiles), and the scores rank releases and can reject them outright.</p>
+  <div class="indexer-cards">
+    {{range .CustomFormats}}
+    <button type="button" class="indexer-card" hx-get="/settings/custom-formats/{{.ID}}/edit" hx-target="#custom-format-dialog-body" hx-swap="innerHTML">
+      <span class="indexer-name">{{.Name}}</span>
+      <span class="indexer-chips"><span class="chip chip-muted">{{len .Conditions}} condition{{if ne (len .Conditions) 1}}s{{end}}</span>{{if .IncludeWhenRenaming}}<span class="chip chip-info">In file names</span>{{end}}</span>
+      <span class="card-sub">{{.Summary}}</span>
+    </button>
+    {{end}}
+    <button type="button" class="indexer-card indexer-add" hx-get="/settings/custom-formats/new" hx-target="#custom-format-dialog-body" hx-swap="innerHTML" aria-label="Add custom format">+</button>
+  </div>
+  <div class="form-row" style="margin-top:12px">
+    <button class="btn btn-sm btn-ghost" type="button" onclick="document.getElementById('custom-format-import-dialog').showModal()">Import JSON</button>
+    <a class="btn btn-sm btn-ghost" href="/settings/custom-formats/export">Export all</a>
+  </div>
+</div>
+
+<dialog id="custom-format-import-dialog" class="guide" onclick="if (event.target === this) this.close()">
+  <div class="guide-head">
+    <h2>Import Custom Formats</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <form class="guide-body mm-form" hx-post="/settings/custom-formats/import" hx-target="#custom-format-import-result" hx-swap="innerHTML">
+    <p class="notice">Paste one custom format or a list of them, as exported by Radarr or Sonarr or published by TRaSH Guides.</p>
+    <div class="setting-row">
+      <div class="setting-label">From</div>
+      <div class="setting-control">
+        <select name="from">
+          <option value="radarr">Radarr (or TRaSH Guides for Radarr)</option>
+          <option value="sonarr">Sonarr (or TRaSH Guides for Sonarr)</option>
+        </select>
+        <span class="setting-help">The two apps number sources, indexer flags and languages differently, so pick the one the JSON came from.</span>
+      </div>
+    </div>
+    <textarea name="json" rows="12" style="width:100%" placeholder='[{"name": "Remux Tier 01", "specifications": [ ... ]}]'></textarea>
+    <div id="custom-format-import-result"></div>
+    <div class="form-row"><button class="btn btn-sm" type="submit">Import</button></div>
+    <p class="setting-help">Conditions UMMarr can't apply (a source it doesn't detect, or a pattern using lookahead, which Go's regular expressions lack) cause that format to be skipped and listed here.</p>
+  </form>
+</dialog>
+
+<dialog id="custom-format-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()"><div id="custom-format-dialog-body"></div></dialog>
+{{end}}
+{{if eq .Tab "metadata"}}
+<div class="panel" data-section="metadata-sources" id="metadata-sources">
+  <div class="panel-head"><h2>Metadata Sources</h2></div>
+  <p class="notice">Where UMMarr gets titles, overviews, dates, episodes and artwork. For each field the first enabled provider with a value wins; the ones below fill in what it leaves empty. Details are fetched when something is added - an item's Metadata button refreshes that one, and System → Tasks → Refresh metadata does the whole library when you ask.</p>
+  {{range .MetadataSources}}
+  {{$media := .MediaType}}
+  <section class="mm-section" style="margin-top:14px">
+    <h3>{{.Label}}</h3>
+    <table class="data-table metadata-sources">
+      <thead><tr><th>Order</th><th>Provider</th><th>Supplies</th><th>Status</th><th></th></tr></thead>
+      <tbody>
+      {{range $i, $p := .Providers}}
+      <tr>
+        <td>{{if eq $i 0}}1st{{else if eq $i 1}}2nd{{else if eq $i 2}}3rd{{else}}{{$i}}th{{end}}</td>
+        <td><button type="button" class="btn btn-sm btn-ghost" hx-get="/settings/metadata-sources/{{$p.ID}}/edit" hx-target="#metadata-provider-dialog-body" hx-swap="innerHTML"><strong>{{$p.Name}}</strong></button></td>
+        <td class="wrap">{{$p.Supplies}}</td>
+        <td class="nowrap">{{if $p.Configured}}<span class="chip chip-good">{{$p.Status}}</span>{{else}}<span class="chip chip-warn">{{$p.Status}}</span>{{end}}</td>
+        <td class="nowrap">
+          {{if not $p.First}}<button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/metadata-sources/move" hx-vals='{"id":"{{$p.ID}}","direction":"up"}' hx-target="#metadata-sources-result" hx-swap="innerHTML" title="Ask {{$p.Name}} earlier" aria-label="Move {{$p.Name}} up">↑</button>{{end}}
+          {{if not $p.Last}}<button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/metadata-sources/move" hx-vals='{"id":"{{$p.ID}}","direction":"down"}' hx-target="#metadata-sources-result" hx-swap="innerHTML" title="Ask {{$p.Name}} later" aria-label="Move {{$p.Name}} down">↓</button>{{end}}
+        </td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+    <div class="form-row" style="margin-top:8px">
+      <span class="setting-help">Add:</span>
+      {{range .CanAdd}}<button class="btn btn-sm btn-ghost" type="button" hx-get="/settings/metadata-sources/new" hx-vals='{"media_type":"{{$media}}","implementation":"{{.Key}}"}' hx-target="#metadata-provider-dialog-body" hx-swap="innerHTML">+ {{.Name}}</button>{{end}}
+    </div>
+    {{if .Note}}<p class="setting-help">{{.Note}}</p>{{end}}
+  </section>
+  {{end}}
+  <div id="metadata-sources-result"></div>
+  <p class="setting-help">A provider can appear more than once (two TheTVDB keys, say), and switching one off leaves it in the list without asking it anything. New kinds of provider appear here as soon as UMMarr learns to talk to them.</p>
+</div>
+
+<dialog id="metadata-provider-dialog" class="guide indexer-dialog" onclick="if (event.target === this) this.close()"><div id="metadata-provider-dialog-body"></div></dialog>
+<div class="panel" data-section="metadata" id="metadata">
+  <div class="panel-head"><h2>Metadata</h2></div>
+  <form class="mm-form" hx-post="/settings/metadata" hx-target="#metadata-result" hx-swap="innerHTML">
+    <p class="notice">Metadata files and images written beside the media, as Radarr, Sonarr and Lidarr’s Metadata consumers do. Written when files are imported, renamed or added; System → Tasks → Write metadata covers the whole library.</p>
+    <div class="setting-row">
+      <div class="setting-label">Providers</div>
+      <div class="setting-control check-row">
+        <label class="setting-check"><input type="checkbox" name="enabled"{{if .Metadata.Enabled}} checked{{end}}> Kodi (XBMC) / Emby</label>
+        <label class="setting-check"><input type="checkbox" name="jellyfin"{{if .Metadata.Jellyfin}} checked{{end}}> Jellyfin</label>
+        <label class="setting-check"><input type="checkbox" name="plex"{{if .Metadata.Plex}} checked{{end}}> Plex</label>
+        <p class="setting-help">Kodi / Emby and Jellyfin read .nfo files and images. Plex reads images only (poster.jpg, fanart.jpg, folder.jpg and a poster.jpg in each season folder); in Plex, set the library’s agent to Plex Movie / Plex TV Series with <em>Use local assets</em> ticked, or use the Personal Media agents.</p>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Movies</div>
+      <div class="setting-control check-row">
+        <label class="setting-check"><input type="checkbox" name="movie_nfo"{{if .Metadata.MovieNFO}} checked{{end}}> Movie .nfo (beside the file)</label>
+        <label class="setting-check"><input type="checkbox" name="movie_images"{{if .Metadata.MovieImages}} checked{{end}}> poster.jpg and fanart.jpg (movie folder)</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">TV</div>
+      <div class="setting-control check-row">
+        <label class="setting-check"><input type="checkbox" name="series_nfo"{{if .Metadata.SeriesNFO}} checked{{end}}> tvshow.nfo</label>
+        <label class="setting-check"><input type="checkbox" name="episode_nfo"{{if .Metadata.EpisodeNFO}} checked{{end}}> Episode .nfo files</label>
+        <label class="setting-check"><input type="checkbox" name="series_images"{{if .Metadata.SeriesImages}} checked{{end}}> poster.jpg, fanart.jpg and season posters (seasonNN-poster.jpg for Kodi / Jellyfin, poster.jpg in each season folder for Plex; season.nfo for Jellyfin)</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Music</div>
+      <div class="setting-control check-row">
+        <label class="setting-check"><input type="checkbox" name="album_nfo"{{if .Metadata.AlbumNFO}} checked{{end}}> album.nfo and artist.nfo</label>
+        <label class="setting-check"><input type="checkbox" name="album_images"{{if .Metadata.AlbumImages}} checked{{end}}> cover.jpg (Kodi / Emby) or folder.jpg (Jellyfin / Plex), plus the artist’s folder.jpg</label>
+      </div>
+    </div>
+    <div class="form-row"><button class="btn btn-sm" type="submit">Save metadata settings</button></div>
+    <div id="metadata-result"></div>
+  </form>
+</div>
+{{end}}
+
+{{$guide := .NamingGuide}}
+{{$media := .Media}}
+{{$errors := .Errors}}
+{{if eq .Tab "media-management"}}
+<form id="media-management" class="panel mm-form" data-section="media-management" method="post" action="/settings/media-management"{{if .Errors}} data-show-advanced{{end}}>
+  <div class="mm-head">
+    <h2>Media management</h2>
+    <div class="mm-actions">
+      {{if .Saved}}<span class="mm-saved">Saved.</span>{{end}}
+      <button class="btn btn-sm btn-ghost" type="button" id="toggle-advanced">Show advanced</button>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="document.getElementById('naming-guide').showModal()">Naming guide</button>
+      <button class="btn btn-sm" type="submit">Save changes</button>
+    </div>
+  </div>
+  {{if .Errors}}<div class="mm-errors">Nothing was saved. Fix the fields marked below and save again.</div>{{end}}
+
+  <section class="mm-section" data-section="media-naming">
+    <h3>Naming</h3>
+    <div class="setting-row">
+      <div class="setting-label">Replace Illegal Characters</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="replace_illegal_characters"{{if $media.ReplaceIllegalCharacters}} checked{{end}}> Replace characters Windows can't use in names, instead of removing them</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Colon Replacement</div>
+      <div class="setting-control">
+        <select name="colon_replacement">{{range .ColonOptions}}<option value="{{.Value}}"{{if eq .Value $media.ColonReplacement}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+        <span class="setting-help">How a colon is handled when characters are replaced. When they're removed, so are colons.</span>
+        {{with index $errors "colon_replacement"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    {{range $guide}}
+    <div class="mm-subhead">{{.Label}}</div>
+    <div class="setting-row">
+      <div class="setting-label">{{.RenameText}}</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="{{.RenameName}}"{{if .Rename}} checked{{end}}> Name files with the file name template below</label>
+        <span class="setting-help">With renaming off, UMMarr keeps each file's own name.</span>
+      </div>
+    </div>
+    {{range .Fields}}
+    <div class="setting-row">
+      <div class="setting-label"><span>{{.Label}}</span></div>
+      <div class="setting-control">
+        <input class="template" type="text" name="{{.FormName}}" value="{{.Value}}" placeholder="{{.Placeholder}}">
+        {{if .Example}}<span class="setting-example">Example: <code>{{.Example}}</code></span>{{end}}
+        {{with .Error}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    {{end}}
+    {{end}}
+  </section>
+
+  <section class="mm-section" data-section="media-folders">
+    <h3>Folders</h3>
+    <div class="setting-row advanced">
+      <div class="setting-label">Create Empty Folders</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="create_empty_folders"{{if $media.CreateEmptyFolders}} checked{{end}}> Create missing movie, series and album folders during a library scan or Refresh</label>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Delete Empty Folders</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="delete_empty_folders"{{if $media.DeleteEmptyFolders}} checked{{end}}> Delete empty folders inside a movie, series or album folder during a library scan or Refresh</label>
+        <span class="setting-help">Only folders with no files at all, and never a library folder itself.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="mm-section" data-section="media-importing">
+    <h3>Importing</h3>
+    <div class="setting-row advanced">
+      <div class="setting-label">Skip Free Space Check</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="skip_free_space_check"{{if $media.SkipFreeSpaceCheck}} checked{{end}}> Import without checking free space</label>
+        <span class="setting-help">Use when UMMarr can't read the free space of your library.</span>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Minimum Free Space</div>
+      <div class="setting-control">
+        <input type="number" min="0" name="minimum_free_space_mb" value="{{$media.MinimumFreeSpaceMB}}">
+        <span class="setting-help">MB. An import is refused if copying it would leave less than this free.</span>
+        {{with index $errors "minimum_free_space_mb"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Use Hardlinks instead of Copy</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="use_hardlinks"{{if $media.UseHardlinks}} checked{{end}}> Link downloads into the library instead of copying them</label>
+        <span class="setting-help">No extra disk space, and seeding carries on. Only works when the download and the library are on the same filesystem; otherwise UMMarr copies.</span>
+        <span class="setting-warning">A hardlinked file keeps the download client's owner and permissions, and shares its date with the download.</span>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Import Using Script</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="import_using_script"{{if $media.ImportUsingScript}} checked{{end}}> Copy files for importing using a script (e.g. for transcoding)</label>
+        <input type="text" name="import_script_path" value="{{$media.ImportScriptPath}}" placeholder="Script path">
+        <span class="setting-inactive">Not active yet: UMMarr's image has no shell to run a script with.</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Import Extra Files</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="import_extra_files"{{if $media.ImportExtraFiles}} checked{{end}}> Import matching extra files (subtitles, nfo, etc.) beside a movie, episode or album</label>
+        <input type="text" name="extra_file_extensions" value="{{$media.ExtraFileExtensions}}" placeholder="srt, nfo">
+        <span class="setting-help">Comma separated. .nfo files are imported as .nfo-orig.</span>
+      </div>
+    </div>
+  </section>
+
+  <section class="mm-section" data-section="media-file-management">
+    <h3>File Management</h3>
+    <div class="setting-row">
+      <div class="setting-label">Unmonitor Deleted Media</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="unmonitor_deleted"{{if $media.UnmonitorDeleted}} checked{{end}}> Unmonitor a movie or episode when its file is found deleted, and an album once all its files are</label>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Propers and Repacks</div>
+      <div class="setting-control">
+        <select name="propers_repacks">{{range .PropersOptions}}<option value="{{.Value}}"{{if eq .Value $media.PropersRepacks}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+        <span class="setting-help">Whether to automatically upgrade to Propers and Repacks.</span>
+        <span class="setting-inactive">Not active yet: needs automatic upgrades.</span>
+        {{with index $errors "propers_repacks"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Analyze Video Files</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="analyze_video_files"{{if $media.AnalyzeVideoFiles}} checked{{end}}> Extract video information such as resolution, runtime and codec information from files</label>
+        <span class="setting-help">Movies and episodes: video codec, bit depth, HDR, audio tracks and their languages, and subtitles. Files are read with FFprobe when they're imported, on Refresh &amp; Scan, and by the hourly Analyze media files task under System → Tasks. A resolution or codec the file name doesn't give is filled in from the file.</span>
+        {{if not $.FFprobeAvailable}}<span class="setting-warning">FFprobe isn't installed in this UMMarr, so nothing can be analyzed yet.</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Analyze Audio Files</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="analyze_audio_files"{{if $media.AnalyzeAudioFiles}} checked{{end}}> Extract audio information such as codec, bitrate, bit depth and sample rate from music files</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Use Plex Media Info</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="plex_media_info"{{if $media.PlexMediaInfo}} checked{{end}}> Read what Plex has already analyzed before opening files with FFprobe</label>
+        <span class="setting-help">Uses the Plex connection under Settings → Connect. Plex has to see the files at the same paths as UMMarr, for example both mounting the media at /data. Files Plex doesn't have are read with FFprobe. Plex's library listing has no audio languages, subtitles or HDR type, so those stay blank for files read from Plex.</span>
+        {{if not $.PlexConnected}}<span class="setting-warning">There's no Plex connection with a server URL and token yet. Add one under Settings → Connect.</span>{{end}}
+        <div class="form-row" style="margin-top:4px"><button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/media-management/plex-media-info/test" hx-target="#plex-media-info-result" hx-swap="innerHTML">Test Plex</button></div>
+        <div id="plex-media-info-result"></div>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Rescan Folder after Refresh</div>
+      <div class="setting-control">
+        <select name="rescan_after_refresh">{{range .RescanOptions}}<option value="{{.Value}}"{{if eq .Value $media.RescanAfterRefresh}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+        <span class="setting-inactive">Not active yet: nothing refreshes metadata on its own yet. The Refresh button always rescans.</span>
+        {{with index $errors "rescan_after_refresh"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Change File Date</div>
+      <div class="setting-control">
+        <label class="setting-help">Movies</label>
+        <select name="movie_file_date">{{range .MovieFileDateOptions}}<option value="{{.Value}}"{{if eq .Value $media.MovieFileDate}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+        <label class="setting-help">Episodes</label>
+        <select name="episode_file_date">{{range .EpisodeFileDateOptions}}<option value="{{.Value}}"{{if eq .Value $media.EpisodeFileDate}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+        <label class="setting-help">Tracks</label>
+        <select name="track_file_date">{{range .TrackFileDateOptions}}<option value="{{.Value}}"{{if eq .Value $media.TrackFileDate}} selected{{end}}>{{.Label}}</option>{{end}}</select>
+        <span class="setting-help">Sets a file's date on import and on Refresh. Left alone when the date isn't known.</span>
+        {{with index $errors "movie_file_date"}}<span class="setting-error">{{.}}</span>{{end}}
+        {{with index $errors "episode_file_date"}}<span class="setting-error">{{.}}</span>{{end}}
+        {{with index $errors "track_file_date"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Recycling Bin</div>
+      <div class="setting-control">
+        <input type="text" name="recycle_bin_path" value="{{$media.RecycleBinPath}}" placeholder="/data/.recycle">
+        <span class="setting-help">Deleted media files would go here instead of being removed.</span>
+        <span class="setting-inactive">Not active yet: UMMarr doesn't delete media files yet.</span>
+        {{with index $errors "recycle_bin_path"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Recycling Bin Cleanup</div>
+      <div class="setting-control">
+        <input type="number" min="0" name="recycle_bin_cleanup_days" value="{{$media.RecycleBinCleanupDays}}">
+        <span class="setting-help">Days to keep files in the recycling bin. 0 turns cleanup off.</span>
+        <span class="setting-inactive">Not active yet: UMMarr doesn't delete media files yet.</span>
+        {{with index $errors "recycle_bin_cleanup_days"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+  </section>
+
+  <section class="mm-section" data-section="media-permissions">
+    <h3>Permissions</h3>
+    <div class="setting-row advanced">
+      <div class="setting-label">Set Permissions</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="set_permissions"{{if $media.SetPermissions}} checked{{end}}> Use the mode and group below for folders and files UMMarr creates</label>
+        <span class="setting-warning">If unsure, leave this off. New folders then copy the permissions of the folder they're created in, which keeps other apps on your share able to read them.</span>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">chmod Folder</div>
+      <div class="setting-control">
+        <input type="text" name="chmod_folder" value="{{$media.ChmodFolder}}" placeholder="755">
+        {{with .PermissionModes}}<span class="setting-example"><code>{{.}}</code></span>{{end}}
+        <span class="setting-help">Octal. Files get the same mode without the execute bits.</span>
+        {{with index $errors "chmod_folder"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">chown Group</div>
+      <div class="setting-control">
+        <input type="text" name="chown_group" value="{{$media.ChownGroup}}" placeholder="Group ID">
+        <span class="setting-help">A group ID number. UMMarr can only use groups it belongs to. Leave empty to keep each file's group.</span>
+        {{with index $errors "chown_group"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+  </section>
+
+  <div class="mm-head" style="margin-top:22px">
+    <span></span>
+    <div class="mm-actions"><button class="btn btn-sm" type="submit">Save changes</button></div>
+  </div>
+</form>
+
+<script>
+(function () {
+  var form = document.getElementById('media-management');
+  var button = document.getElementById('toggle-advanced');
+  function show(on) {
+    form.toggleAttribute('data-show-advanced', on);
+    button.textContent = on ? 'Hide advanced' : 'Show advanced';
+  }
+  var stored = null;
+  try { stored = localStorage.getItem('ummarr-show-advanced'); } catch (e) {}
+  show(form.hasAttribute('data-show-advanced') || stored === '1');
+  button.addEventListener('click', function () {
+    var on = !form.hasAttribute('data-show-advanced');
+    show(on);
+    try { localStorage.setItem('ummarr-show-advanced', on ? '1' : '0'); } catch (e) {}
+  });
+})();
+</script>
+
+<dialog id="naming-guide" class="guide" onclick="if (event.target === this) this.close()">
+  <div class="guide-head">
+    <h2>Naming guide</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <h3>How templates work</h3>
+    <ul>
+      <li>Type any text you like. Each <code>{Token}</code> is swapped for that item's value. Spell token names exactly as listed below, capitals included.</li>
+      <li>A token with no value comes out blank, and so does a misspelled one. <code>{Movie Title} ({Release Year})</code> gives <code>Title ()</code> for a movie whose year isn't known.</li>
+      <li>Numbered tokens can be zero-padded by adding zeros: <code>{season:00}</code> turns 1 into 01, and <code>{episode:000}</code> turns 5 into 005.</li>
+      <li>In a folder box, <code>/</code> starts a subfolder: <code>Various Artists/{Series Name}</code> makes one folder inside another. In a file name box it's removed or replaced like the other characters below.</li>
+      <li>{{.CharacterRule}} Spaces and dots at the end of a name are trimmed.</li>
+      <li>With renaming turned off for a media type, files keep their own names and its file name box isn't used.</li>
+      <li>Saving never renames or moves anything already on disk.</li>
+      <li>The movie, series, artist, album and Various Artists series folder boxes only apply to things you add afterwards. Downloads for things already in your library keep going into their existing folders.</li>
+      <li>The season folder and file name boxes apply to every download from then on, including new episodes and tracks for things you already have.</li>
+    </ul>
+    {{range $guide}}
+    <h3>{{.Label}}</h3>
+    {{range .Fields}}
+    <div class="guide-field">
+      <div class="guide-field-head"><strong>{{.Label}}</strong><span class="card-sub">{{if .Folder}}folder{{else}}file name{{end}}</span></div>
+      {{if .Note}}<p class="guide-note">{{.Note}}</p>{{end}}
+      <table class="guide-tokens">
+        {{range .Tokens}}
+        <tr><td><code>{{.Code}}</code>{{if .PaddedCode}} <code>{{.PaddedCode}}</code>{{end}}</td><td>{{.Description}}</td></tr>
+        {{end}}
+      </table>
+      <p class="guide-example">{{if .Value}}Your template <code>{{.Value}}</code> gives <code>{{if .Example}}{{.Example}}{{else}}(nothing){{end}}</code>{{else}}This box is empty.{{end}}</p>
+    </div>
+    {{end}}
+    {{end}}
+  </div>
+</dialog>
+
+<div class="panel" data-section="library-scan">
+  <div class="panel-head"><h2>Library scan</h2></div>
+  <p class="notice">Scans your library folders for files already on disk that
+    UMMarr doesn't know about yet - e.g. a library a previous
+    Radarr/Sonarr/Lidarr setup already organized. Doesn't touch anything
+    already tracked. This runs synchronously and can take a while for a
+    large library - the page will just wait.</p>
+  <table class="root-folders">
+    <tr><th>Path</th><th>Type</th><th></th></tr>
+    {{range .RootFolders}}
+    <tr class="scan-folder"><td>{{.Path}}</td><td>{{.TypeLabel}}</td><td class="root-folder-action"><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"root_folder_id":"{{.ID}}"}' hx-target="#scan-result" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button></td></tr>
+    {{else}}
+    <tr><td colspan="3" class="notice">No library folders configured yet.</td></tr>
+    {{end}}
+  </table>
+  <div class="form-row">
+    <button class="btn btn-sm" hx-post="/settings/scan-library" hx-target="#scan-result" hx-swap="innerHTML" hx-disabled-elt="this">Scan all folders</button>
+    <a class="btn btn-sm btn-ghost" href="/library/scan-report">Scan report{{if $.UnmatchedCount}} ({{$.UnmatchedCount}}){{end}}</a>
+  </div>
+  <span class="setting-help">The scan report lists every folder a scan couldn't match, so you can match it by hand, ignore it or dismiss it.</span>
+  <div id="scan-result"></div>
+</div>
+
+<div class="panel" data-section="library">
+  <div class="panel-head"><h2>Library</h2></div>
+  <table class="root-folders">
+    <tr><th>Path</th><th>Type</th><th>Free Space</th><th>Unmapped Folders</th><th></th></tr>
+    {{range .RootFolders}}
+    <tr><td>{{.Path}}</td><td>{{.TypeLabel}}</td><td class="free-space">{{.FreeSpace}}</td><td class="unmapped">{{.Unmapped}}</td><td class="root-folder-action">{{if .BuiltIn}}<span class="card-sub">Built in</span>{{else if .Removable}}<button class="btn btn-sm btn-ghost" type="button" hx-delete="/settings/root-folders/{{.ID}}" hx-confirm="Remove the library folder {{.Path}} from UMMarr? Nothing on disk is deleted.">Remove</button>{{else if .UsedBy}}<span class="card-sub">{{.UsedBy}}</span>{{end}}</td></tr>
+    {{else}}
+    <tr><td colspan="5" class="notice">No library folders configured yet.</td></tr>
+    {{end}}
+  </table>
+  <p class="notice">New folders are created under <code>/data/</code> (the shared media mount) - just enter the subfolder name, e.g. "Movies".</p>
+  <form class="form-row" hx-post="/settings/root-folders" hx-target="body">
+    <select class="select" name="media_type">
+      <option value="movie">Movie</option>
+      <option value="series">Series</option>
+      <option value="music">Music</option>
+    </select>
+    <span class="card-sub" style="font-family:var(--font-mono)">/data/</span>
+    <input type="text" name="path" placeholder="Movies" required>
+    <button class="btn btn-sm" type="submit">Add library folder</button>
+  </form>
+</div>
+{{end}}
+
+{{if eq .Tab "profiles"}}
+<div class="panel" data-section="quality-profiles">
+  <div class="panel-head"><h2>Quality profiles</h2></div>
+  <table class="settings-table">
+    {{range .QualityProfiles}}
+    <tr><td><a href="/settings/quality-profiles/{{.ID}}">{{.Name}}</a> <span class="notice">(edit weights)</span></td><td style="text-align:right">{{if .IsDefault}}<span class="chip chip-good" title="Preselected when adding movies, series and artists">Default</span>{{else}}<button class="btn btn-sm btn-ghost" hx-post="/settings/quality-profiles/{{.ID}}/default" hx-target="body">Make default</button>{{end}}</td></tr>
+    {{else}}
+    <tr><td colspan="2" class="notice">No quality profiles configured yet.</td></tr>
+    {{end}}
+  </table>
+  <form class="form-row" hx-post="/settings/quality-profiles" hx-target="body">
+    <input type="text" name="name" placeholder="e.g. HD-1080p" required>
+    <button class="btn btn-sm" type="submit">Add quality profile</button>
+  </form>
+</div>
+
+<div class="panel" data-section="preferred-words">
+  <div class="panel-head"><h2>Preferred Words</h2></div>
+  <p class="notice">A term found in a release's title adds its score to that release's ranking - positive to prefer it, negative to push it down. Applies to every search, across movies, TV and music.</p>
+  <table class="settings-table">
+    <tr><th>Term</th><th>Score</th><th></th></tr>
+    {{range .PreferredWords}}
+    <tr>
+      <td><input type="text" name="term" value="{{.Term}}" style="width:100%"></td>
+      <td style="text-align:right"><input type="number" name="score" value="{{.Score}}" style="width:8em;text-align:right"></td>
+      <td class="root-folder-action">
+        <button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/preferred-words/{{.ID}}" hx-include="closest tr" hx-target="body">Save</button>
+        <button class="btn btn-sm btn-ghost" type="button" hx-delete="/settings/preferred-words/{{.ID}}" hx-target="body" hx-confirm="Remove the preferred word &quot;{{.Term}}&quot;?">Remove</button>
+      </td>
+    </tr>
+    {{else}}
+    <tr><td colspan="3" class="notice">No preferred words configured yet.</td></tr>
+    {{end}}
+  </table>
+  <form class="form-row" hx-post="/settings/preferred-words" hx-target="body">
+    <input type="text" name="term" placeholder="e.g. x265" required>
+    <input type="number" name="score" placeholder="Score, e.g. 10 or -10" required style="width:10em">
+    <button class="btn btn-sm" type="submit">Add preferred word</button>
+  </form>
+</div>
+{{end}}
+
+<script>
+// Every section's heading collapses it; each browser remembers which are
+// closed. A section holding a field that failed to save always opens.
+(function () {
+  document.querySelectorAll('[data-section]').forEach(function (section) {
+    var heading = section.querySelector(':scope > .panel-head > h2, :scope > .mm-head > h2, :scope > h3');
+    if (!heading) return;
+    var key = 'ummarr-collapsed-' + section.dataset.section;
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'section-toggle';
+    while (heading.firstChild) button.appendChild(heading.firstChild);
+    heading.appendChild(button);
+    function collapse(on) {
+      section.toggleAttribute('data-collapsed', on);
+      button.setAttribute('aria-expanded', on ? 'false' : 'true');
+    }
+    var stored = null;
+    try { stored = localStorage.getItem(key); } catch (e) {}
+    collapse(stored === '1' && !section.querySelector('.setting-error'));
+    button.addEventListener('click', function () {
+      var on = !section.hasAttribute('data-collapsed');
+      collapse(on);
+      try { localStorage.setItem(key, on ? '1' : '0'); } catch (e) {}
+    });
+  });
+})();
+</script>
+{{end}}

@@ -1,0 +1,11 @@
+.git
+.gitignore
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.env
+.env.*
+!.env.example
+README.md
+docker-compose.yml

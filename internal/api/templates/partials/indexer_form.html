@@ -1,0 +1,199 @@
+{{define "indexer_form"}}
+{{$ix := .Indexer}}
+{{$errors := .Errors}}
+{{$torznab := eq $ix.Implementation "Torznab"}}
+<form class="mm-form indexer-form" hx-post="{{if .IsNew}}/settings/indexers{{else}}/settings/indexers/{{$ix.ID}}{{end}}" hx-target="#indexer-dialog-body" hx-swap="innerHTML"{{if .Errors}} data-show-advanced{{end}}>
+  <div class="guide-head">
+    <h2>{{if .IsNew}}Add{{else}}Edit{{end}} Indexer - {{$ix.Implementation}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <input type="hidden" name="implementation" value="{{$ix.Implementation}}">
+    {{if not .IsNew}}<input type="hidden" name="id" value="{{$ix.ID}}">{{end}}
+    {{if $ix.Synced}}<p class="notice">Prowlarr manages this indexer. Its URL, API key, categories and seed settings are replaced the next time Prowlarr syncs.</p>{{end}}
+    {{if $ix.Converted}}<p class="notice">Created from UMMarr's old Prowlarr connection. When Prowlarr's app sync adds this indexer itself, this entry stops being searched and is removed.</p>{{end}}
+    {{if not $torznab}}<p class="setting-warning">Releases from a Newznab indexer need a usenet download client (Settings → Download Clients) to be grabbed; until one is added they only show in search results.</p>{{end}}
+    {{if .Errors}}<div class="mm-errors">Nothing was saved. Fix the fields marked below and save again.</div>{{end}}
+
+    <div class="setting-row">
+      <div class="setting-label">Name</div>
+      <div class="setting-control">
+        <input type="text" name="name" value="{{$ix.Name}}">
+        {{with index $errors "name"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Enable RSS</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="enable_rss"{{if $ix.EnableRSS}} checked{{end}}> Use this indexer when UMMarr looks for new releases with RSS Sync</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Enable Automatic Search</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="enable_automatic_search"{{if $ix.EnableAutomaticSearch}} checked{{end}}> Use this indexer when UMMarr searches on its own, or when you use Search</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Enable Interactive Search</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="enable_interactive_search"{{if $ix.EnableInteractiveSearch}} checked{{end}}> Use this indexer for Find release</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">URL</div>
+      <div class="setting-control">
+        <input type="text" name="base_url" value="{{$ix.BaseURL}}" placeholder="{{if $torznab}}http://media-server:9696/1/{{else}}https://api.nzbgeek.info{{end}}">
+        {{if $torznab}}<span class="setting-help">For one of Prowlarr's indexers: Prowlarr's address followed by the indexer's number, e.g. <code>http://media-server:9696/1/</code>.</span>{{end}}
+        {{with index $errors "base_url"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">API Path</div>
+      <div class="setting-control">
+        <input type="text" name="api_path" value="{{$ix.APIPath}}">
+        <span class="setting-help">Path to the API, usually <code>/api</code>.</span>
+        {{with index $errors "api_path"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">API Key</div>
+      <div class="setting-control">
+        <input type="password" name="api_key" autocomplete="new-password" placeholder="{{if $ix.APIKey}}•••••••• (set - leave blank to keep){{else}}API key{{end}}">
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Categories</div>
+      <div class="setting-control">
+        <div class="category-groups">
+          {{range .CategoryGroups}}
+          <fieldset class="category-group">
+            <legend>{{.Label}}</legend>
+            {{range .Options}}<label class="setting-check"><input type="checkbox" name="categories" value="{{.ID}}"{{if .Checked}} checked{{end}}> {{.Name}}</label>{{end}}
+          </fieldset>
+          {{end}}
+        </div>
+        <span class="setting-help">Movies, TV and music are only searched in their own categories here. Pick at least one.</span>
+        {{with index $errors "categories"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Anime Categories</div>
+      <div class="setting-control">
+        <div class="category-groups">
+          <fieldset class="category-group">
+            <legend>TV</legend>
+            {{range .AnimeOptions}}<label class="setting-check"><input type="checkbox" name="anime_categories" value="{{.ID}}"{{if .Checked}} checked{{end}}> {{.Name}}</label>{{end}}
+          </fieldset>
+        </div>
+        <span class="setting-help">Categories used for anime series, as in Sonarr.</span>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Additional Parameters</div>
+      <div class="setting-control">
+        <input type="text" name="additional_parameters" value="{{$ix.AdditionalParameters}}" placeholder="&amp;foo=bar">
+        <span class="setting-help">Added to every request to this indexer.</span>
+        {{with index $errors "additional_parameters"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    {{if $torznab}}
+    <div class="setting-row advanced">
+      <div class="setting-label">Minimum Seeders</div>
+      <div class="setting-control">
+        <input type="number" min="0" name="minimum_seeders" value="{{$ix.MinimumSeeders}}">
+        <span class="setting-help">Minimum number of seeders required.</span>
+        {{with index $errors "minimum_seeders"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Seed Ratio</div>
+      <div class="setting-control">
+        <input type="text" inputmode="decimal" name="seed_ratio" value="{{.SeedRatio}}">
+        <span class="setting-help">The ratio a torrent should reach before stopping. Empty uses Deluge's own setting. Follow the indexer's rules.</span>
+        {{with index $errors "seed_ratio"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Seed Time</div>
+      <div class="setting-control">
+        <input type="number" min="0" name="seed_time" value="{{.SeedTime}}">
+        <span class="setting-help">Minutes a torrent should seed before stopping. Empty uses the download client's own setting.</span>
+        <span class="setting-inactive">Deluge can't stop torrents by seed time, so this is kept for Prowlarr's sync but has no effect.</span>
+        {{with index $errors "seed_time"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Season-Pack Seed Time</div>
+      <div class="setting-control">
+        <input type="number" min="0" name="season_pack_seed_time" value="{{.SeasonPackSeedTime}}">
+        <span class="setting-help">Minutes a season pack should seed, as in Sonarr. Deluge can't enforce it.</span>
+        {{with index $errors "season_pack_seed_time"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Discography Seed Time</div>
+      <div class="setting-control">
+        <input type="number" min="0" name="discography_seed_time" value="{{.DiscographySeedTime}}">
+        <span class="setting-help">Minutes a discography should seed, as in Lidarr. Deluge can't enforce it.</span>
+        {{with index $errors "discography_seed_time"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Required Flags</div>
+      <div class="setting-control">
+        <div class="check-row">{{range .Flags}}<label class="setting-check"><input type="checkbox" name="required_flags" value="{{.Value}}"{{if .Checked}} checked{{end}}> {{.Name}}</label>{{end}}</div>
+        <span class="setting-help">A release needs at least one of the flags ticked here to be grabbed.</span>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Reject Blocklisted Torrent Hashes While Grabbing</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="reject_blocklisted"{{if $ix.RejectBlocklisted}} checked{{end}}> Reject a torrent whose hash is blocklisted, even under another name</label>
+        <span class="setting-help">If a torrent is blocklisted by hash it may not be properly rejected during RSS or search for some indexers. With this on, it is rejected after the torrent is fetched but before it is sent to the client.</span>
+      </div>
+    </div>
+    {{end}}
+    <div class="setting-row">
+      <div class="setting-label">Grab Limit</div>
+      <div class="setting-control">
+        <input type="number" min="0" name="grab_limit" value="{{$ix.GrabLimit}}">
+        <span class="setting-help">How many releases UMMarr may grab from this indexer a day, 0 for no limit. Trackers with a daily download cap (IPTorrents allows 150 for a Power User) serve an error page once it's hit, which looks like a broken indexer - this stops before that.</span>
+        {{with index $errors "grab_limit"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Grab Limit Resets At</div>
+      <div class="setting-control">
+        <input type="number" min="0" max="23" name="grab_limit_reset_hour" value="{{$ix.GrabLimitResetHour}}">
+        <span class="setting-help">The hour (UTC, 0-23) the tracker's own daily counter resets. Grabs before it don't count towards the limit.</span>
+        {{with index $errors "grab_limit_reset_hour"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Indexer Priority</div>
+      <div class="setting-control">
+        <input type="number" min="1" max="50" name="priority" value="{{$ix.Priority}}">
+        <span class="setting-help">From 1 (highest) to 50 (lowest). Default 25. Breaks ties between otherwise equal releases; every enabled indexer is still searched.</span>
+        {{with index $errors "priority"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Download Client</div>
+      <div class="setting-control">
+        <span class="setting-check">By protocol</span>
+        <span class="setting-help">Grabs go to the enabled download client for the release's protocol (Settings → Download Clients).</span>
+      </div>
+    </div>
+    <div id="indexer-test-result"></div>
+  </div>
+  <div class="dialog-foot">
+    {{if not .IsNew}}<button class="btn btn-sm btn-danger" type="button" hx-delete="/settings/indexers/{{$ix.ID}}" hx-confirm="Delete the indexer {{$ix.Name}}?">Delete</button>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="var f = this.closest('form'); f.toggleAttribute('data-show-advanced'); this.textContent = f.hasAttribute('data-show-advanced') ? 'Hide advanced' : 'Show advanced'">{{if .Errors}}Hide advanced{{else}}Show advanced{{end}}</button>
+    <button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/indexers/test" hx-include="closest form" hx-target="#indexer-test-result" hx-swap="innerHTML">Test</button>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}

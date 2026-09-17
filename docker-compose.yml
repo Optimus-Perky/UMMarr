@@ -1,0 +1,40 @@
+services:
+  ummarr:
+    build: .
+    image: ummarr:latest
+    container_name: ummarr
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # Times in the UI (queue, history, calendar) use this zone.
+      - TZ=Europe/London
+    env_file:
+      - .env
+    volumes:
+      # Persists the SQLite database (library metadata, grabs, settings)
+      # across container recreates.
+      - ummarr-data:/config
+
+      # The shared media/downloads root - edit the left side to your
+      # actual host path. IMPORTANT: this must be mounted at the SAME
+      # container-internal path (/data) your download client itself uses
+      # for its own downloads/move-completed directories, not a separate
+      # "just the finished library" mount. UMMarr's importer copies files
+      # using the path Deluge reports via its own API (e.g.
+      # "/data/completed/<release>/movie.mkv") - if UMMarr's container
+      # doesn't have that same host directory mounted at that same
+      # /data path, it can't find the file to copy at all. Point UMMarr's
+      # own Settings -> Root Folders at subpaths under this same mount
+      # (e.g. /data/Movies, /data/TV, /data/Music) once it's running.
+      - /srv/media:/data   # host media/downloads root - change to yours
+
+    # No depends_on: Prowlarr/Deluge are expected to be existing,
+    # separately-run containers (or bare-metal services) on the same
+    # host - point UMMARR_PROWLARR_BASE_URL/UMMARR_DELUGE_BASE_URL
+    # (in .env) at the Docker host IP and their mapped ports rather than
+    # a Docker service name, unless you've explicitly put all of these on
+    # one shared custom Docker network.
+
+volumes:
+  ummarr-data:

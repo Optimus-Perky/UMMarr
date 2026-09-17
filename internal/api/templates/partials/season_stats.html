@@ -1,0 +1,6 @@
+{{define "season_stats"}}
+<span id="season-stats-{{.SeasonNumber}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  <span class="chip {{.StatsClass}}">{{.Downloaded}}/{{.Total}}</span>
+  {{if .SizeHuman}}<span class="card-year">{{.SizeHuman}}</span>{{end}}
+</span>
+{{end}}

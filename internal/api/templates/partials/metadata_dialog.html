@@ -1,0 +1,58 @@
+{{define "metadata_dialog"}}
+<div class="guide-head">
+  <h2>Metadata - {{.Title}}</h2>
+  <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+</div>
+<div class="guide-body">
+  <h3>Match</h3>
+  <div class="form-row" style="align-items:center">
+    {{if .MatchProvider}}<span class="chip chip-good">Matched to {{.MatchProvider}} {{.MatchName}}</span>{{else}}<span class="chip chip-warn">Not matched to a provider</span>{{end}}
+    <button class="btn btn-sm btn-ghost" type="button" hx-get="{{.FixMatchURL}}" hx-target="#release-dialog-body" hx-swap="innerHTML">Change match…</button>
+    <button class="btn btn-sm btn-ghost" type="button" hx-post="{{.RefreshURL}}" hx-target="#metadata-refresh-result" hx-swap="innerHTML" hx-disabled-elt="this" title="{{.RefreshExplanation}}">{{.RefreshLabel}}</button>
+  </div>
+  <p class="setting-help">Change match points this {{.Noun}} at a different entry when it was matched to the wrong one - its files, monitoring and profile stay. {{.RefreshExplanation}}</p>
+  <div id="metadata-refresh-result"></div>
+
+  <h3>Poster</h3>
+  {{if .Posters}}
+  <p class="setting-help">{{if .PosterChosen}}This poster was chosen by hand and survives refreshes.{{else}}Using the first poster the providers offered. Pick another to fix it in place.{{end}}</p>
+  <div class="poster-picker">
+    {{$current := .PosterURL}}{{$type := .EntityType}}{{$id := .ItemID}}
+    {{range .Posters}}
+    <button type="button" class="poster-choice{{if eq . $current}} chosen{{end}}" hx-post="/metadata/{{$type}}/{{$id}}/poster" hx-vals='{"url":"{{.}}"}' hx-swap="none" title="Use this poster">
+      <img src="{{.}}" alt="" loading="lazy">
+    </button>
+    {{end}}
+  </div>
+  {{if .PosterChosen}}
+  <div class="form-row" style="margin-top:8px">
+    <button class="btn btn-sm btn-ghost" type="button" hx-post="/metadata/{{$type}}/{{$id}}/poster" hx-vals='{"url":""}' hx-swap="none">Use the providers' choice again</button>
+  </div>
+  {{end}}
+  {{else}}
+  <p class="notice">No posters on offer - refresh the {{.Noun}} to fetch them.</p>
+  {{end}}
+
+  <details style="margin-top:16px">
+    <summary>Where the details came from</summary>
+    {{if .Order}}<p class="setting-help" style="margin-top:8px">Providers are asked in this order: <strong>{{.Order}}</strong>. Change it under <a href="/settings/metadata">Settings → Metadata</a>.</p>{{end}}
+    {{if .Fields}}
+    <table class="data-table">
+      <thead><tr><th>Field</th><th>Source</th><th>Fetched</th></tr></thead>
+      <tbody>{{range .Fields}}<tr><td>{{.Field}}</td><td>{{.Source}}</td><td class="nowrap">{{.Fetched}}</td></tr>{{end}}</tbody>
+    </table>
+    {{end}}
+    {{if .EpisodeFields}}
+    <h3>Episodes</h3>
+    <table class="data-table">
+      <thead><tr><th>Field</th><th>Source</th><th>Episodes</th></tr></thead>
+      <tbody>{{range .EpisodeFields}}<tr><td>{{.Field}}</td><td>{{.Source}}</td><td>{{.Fetched}}</td></tr>{{end}}</tbody>
+    </table>
+    {{end}}
+    {{if .IDs}}
+    <h3>Provider ids</h3>
+    <table class="data-table"><tbody>{{range .IDs}}<tr><td>{{.Field}}</td><td class="mono">{{.Source}}</td></tr>{{end}}</tbody></table>
+    {{end}}
+  </details>
+</div>
+{{end}}

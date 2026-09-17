@@ -1,0 +1,66 @@
+{{define "artist_monitored"}}<span class="chip {{if .Monitored}}chip-good{{else}}chip-warn{{end}}" style="cursor:pointer" hx-post="/music/artists/{{.ID}}/monitored" hx-vals='{"monitored":"{{if .Monitored}}false{{else}}true{{end}}"}' hx-target="this" hx-swap="outerHTML" title="Click to toggle monitored">{{if .Monitored}}Monitored{{else}}Unmonitored{{end}}</span>{{end}}
+
+{{define "artist_edit"}}
+{{$a := .Artist}}
+<form hx-post="/music/artists/{{$a.ID}}/edit" hx-target="#artist-edit-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Edit - {{$a.Name}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body mm-form">
+    <div class="setting-row">
+      <div class="setting-label">Monitored</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="monitored"{{if $a.Monitored}} checked{{end}}> Search for this artist's missing albums</label>
+        <label class="setting-check"><input type="checkbox" name="monitor_albums"> Apply to every album of this artist too</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Quality Profile</div>
+      <div class="setting-control">
+        <select name="quality_profile_id">
+          {{$current := $a.QualityProfileID.Int64}}{{range .Profiles}}<option value="{{.ID}}"{{if eq .ID $current}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Path</div>
+      <div class="setting-control">
+        <input type="text" name="path" value="{{$a.Path.String}}" style="min-width:320px">
+        <span class="setting-help">Where this artist's albums live. Changing it doesn't move any files.</span>
+      </div>
+    </div>
+    <div id="artist-edit-result"></div>
+  </div>
+  <div class="dialog-foot">
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}
+
+{{define "artist_delete"}}
+<form hx-delete="/music/artists/{{.ID}}" hx-target="#artist-delete-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Delete - {{.Name}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body mm-form">
+    <p class="notice">{{.Name}} has {{.AlbumCount}} album(s) in the library, {{.AlbumsWithFiles}} with files.</p>
+    <div class="setting-row">
+      <div class="setting-label">Files</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="delete_files"> Delete the artist's folder and its files</label>
+        <span class="setting-help">{{if .Path.Valid}}{{.Path.String}}{{else}}No folder recorded{{end}} — only a folder inside a music library folder is removed.</span>
+      </div>
+    </div>
+    <div id="artist-delete-result"></div>
+  </div>
+  <div class="dialog-foot">
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+  </div>
+</form>
+{{end}}

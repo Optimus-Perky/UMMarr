@@ -1,0 +1,30 @@
+{{define "content"}}
+<div class="section-head"><h2>Scan report</h2><span class="section-count">{{len .Rows}}</span><span class="section-actions">
+  <a class="btn btn-sm btn-ghost" href="/library/scan-report{{if not .ShowIgnored}}?ignored=1{{end}}">{{if .ShowIgnored}}Hide ignored{{else}}Show ignored{{end}}</a>
+  <a class="btn btn-sm btn-ghost" href="/settings/media-management">Library scan</a>
+</span></div>
+{{if .Notice}}<p class="indexer-test ok">{{.Notice}}</p>{{end}}
+<p class="notice">Folders the last library scans couldn't take. Match one to say what it really is - UMMarr adds it pointed at that folder and brings its files in. Ignore hides a folder for good; Dismiss drops it until a scan finds it again.</p>
+{{if .Rows}}
+<table class="data-table" data-table-id="scan-report">
+  <thead><tr><th>Folder</th><th>Type</th><th>Why</th><th>Last seen</th><th class="col-actions"></th></tr></thead>
+  <tbody>
+    {{range .Rows}}
+    <tr id="unmatched-{{.ID}}">
+      <td><div class="scan-name">{{.Name}}</div><div class="card-sub">{{.Path}}</div></td>
+      <td>{{.TypeLabel}}</td>
+      <td>{{.ReasonLabel}}{{if .Detail}}<div class="card-sub">{{.Detail}}</div>{{end}}</td>
+      <td>{{.LastSeenText}}</td>
+      <td class="col-actions">
+        {{if .CanMatch}}<button class="btn btn-sm" type="button" hx-get="/library/scan-report/{{.ID}}/match" hx-target="#release-dialog-body" hx-swap="innerHTML">Match</button>{{end}}
+        <button class="btn btn-sm btn-ghost" type="button" hx-post="/library/scan-report/{{.ID}}/ignore" hx-swap="none">{{if .Ignored}}Unignore{{else}}Ignore{{end}}</button>
+        <button class="btn btn-sm btn-ghost" type="button" hx-post="/library/scan-report/{{.ID}}/dismiss" hx-swap="none">Dismiss</button>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+<p class="notice">Nothing waiting: every folder the last scans saw is either in the library or ignored.</p>
+{{end}}
+{{end}}

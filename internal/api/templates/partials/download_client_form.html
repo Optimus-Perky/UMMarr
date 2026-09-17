@@ -1,0 +1,103 @@
+{{define "download_client_form"}}
+{{$dc := .Client}}
+{{$errors := .Errors}}
+{{$sab := eq $dc.Implementation "sabnzbd"}}
+{{$qbit := eq $dc.Implementation "qbittorrent"}}
+{{$transmission := eq $dc.Implementation "transmission"}}
+{{$nzbget := eq $dc.Implementation "nzbget"}}
+{{$userpass := or $qbit $transmission $nzbget}}
+<form class="mm-form indexer-form" hx-post="{{if .IsNew}}/settings/download-clients{{else}}/settings/download-clients/{{$dc.ID}}{{end}}" hx-target="#download-client-dialog-body" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>{{if .IsNew}}Add{{else}}Edit{{end}} Download Client - {{$dc.Label}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <input type="hidden" name="implementation" value="{{$dc.Implementation}}">
+    {{if not .IsNew}}<input type="hidden" name="id" value="{{$dc.ID}}">{{end}}
+    {{if .Errors}}<div class="mm-errors">Nothing was saved. Fix the fields marked below and save again.</div>{{end}}
+    <div class="setting-row">
+      <div class="setting-label">Name</div>
+      <div class="setting-control">
+        <input type="text" name="name" value="{{$dc.Name}}">
+        {{with index $errors "name"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Enable</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="enabled"{{if $dc.Enabled}} checked{{end}}> Send {{$dc.Protocol}} releases to this client</label></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">URL</div>
+      <div class="setting-control">
+        <input type="text" name="base_url" value="{{$dc.BaseURL}}" placeholder="http://media-server:8080">
+        <span class="setting-help">The web UI address as UMMarr reaches it. A client inside the VPN container is reached through the VPN container's address.</span>
+        {{with index $errors "base_url"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    {{if $sab}}
+    <div class="setting-row">
+      <div class="setting-label">API Key</div>
+      <div class="setting-control">
+        <input type="password" name="api_key" placeholder="{{if $dc.APIKeySet}}•••••••• (set - leave blank to keep){{else}}From SABnzbd's Config → General{{end}}" autocomplete="new-password">
+        {{with index $errors "api_key"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    {{else}}
+    {{if $userpass}}
+    <div class="setting-row">
+      <div class="setting-label">Username</div>
+      <div class="setting-control"><input type="text" name="username" value="{{$dc.Username}}" autocomplete="off"></div>
+    </div>
+    {{end}}
+    <div class="setting-row">
+      <div class="setting-label">Password</div>
+      <div class="setting-control"><input type="password" name="password" placeholder="{{if $dc.PasswordSet}}•••••••• (set - leave blank to keep){{else}}Password{{end}}" autocomplete="new-password"></div>
+    </div>
+    {{end}}
+    {{if or $sab $qbit $nzbget $transmission}}
+    <div class="setting-row">
+      <div class="setting-label">Category</div>
+      <div class="setting-control">
+        <input type="text" name="category" value="{{$dc.Category}}" placeholder="ummarr">
+        {{if $transmission}}<span class="setting-help">Transmission has labels rather than categories; this is added as a label.</span>{{end}}
+        <span class="setting-help">Adding a category keeps UMMarr's downloads apart from others in the client. Leave blank for none.</span>
+      </div>
+    </div>
+    {{end}}
+    <div class="setting-row">
+      <div class="setting-label">Client Priority</div>
+      <div class="setting-control">
+        <input type="number" min="1" max="50" name="priority" value="{{$dc.Priority}}">
+        <span class="setting-help">From 1 (highest) to 50 (lowest). With several {{$dc.Protocol}} clients, the highest priority gets every grab.</span>
+        {{with index $errors "priority"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Remote Path Mapping</div>
+      <div class="setting-control">
+        <div class="form-row">
+          <input type="text" name="remote_path" value="{{$dc.RemotePath}}" placeholder="Client's path, e.g. /downloads">
+          <input type="text" name="local_path" value="{{$dc.LocalPath}}" placeholder="UMMarr's path, e.g. /data/downloads">
+        </div>
+        <span class="setting-help">Only needed when the client sees its download folder under a different path than UMMarr does. Leave both blank when they share the same mount.</span>
+        {{with index $errors "remote_path"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Remove Failed</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="remove_failed"{{if $dc.RemoveFailed}} checked{{end}}> Remove failed downloads, and their files, from the download client</label>
+        <span class="setting-help">A failed download is blocklisted either way; this also deletes it from {{$dc.Name}}.</span>
+      </div>
+    </div>
+    <div id="download-client-test-result"></div>
+  </div>
+  <div class="dialog-foot">
+    {{if not .IsNew}}<button class="btn btn-sm btn-danger" type="button" hx-delete="/settings/download-clients/{{$dc.ID}}" hx-confirm="Delete the download client {{$dc.Name}}? Downloads already sent to it keep going; UMMarr just stops asking it about them.">Delete</button>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/download-clients/test" hx-include="closest form" hx-target="#download-client-test-result" hx-swap="innerHTML">Test</button>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}

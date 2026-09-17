@@ -1,0 +1,36 @@
+{{define "rename_preview"}}
+<form class="rename-form" hx-post="/tv/{{.SeriesID}}/rename" hx-target="#rename-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Organize &amp; Rename</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <div class="rename-info">
+      <div>All paths are relative to: <code>{{.SeriesPath}}</code></div>
+      <div>Naming pattern: <code>{{.Pattern}}</code></div>
+    </div>
+    {{if .Err}}<p class="indexer-test failed">{{.Err}}</p>
+    {{else if not .Items}}<p class="notice">Every file is already named to match the templates.</p>
+    {{else}}
+    <ul class="rename-list">
+      {{range .Items}}
+      <li>
+        <label class="rename-check"><input type="checkbox" name="file_id" value="{{.FileID}}" checked></label>
+        <div class="rename-paths">
+          <div class="rename-old"><span>&minus;</span> {{.Current}}</div>
+          <div class="rename-new"><span>+</span> {{.New}}</div>
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
+    <div id="rename-result"></div>
+  </div>
+  <div class="dialog-foot">
+    {{if .Items}}<label class="setting-check"><input type="checkbox" checked onchange="this.closest('form').querySelectorAll('input[name=file_id]').forEach(function (c) { c.checked = this.checked }, this)"> All</label>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    {{if .Items}}<button class="btn btn-sm" type="submit">Organize</button>{{end}}
+  </div>
+</form>
+{{end}}

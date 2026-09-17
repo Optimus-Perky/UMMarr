@@ -1,0 +1,51 @@
+{{define "content"}}
+<div class="section-head"><h2>Season Pass</h2><span class="section-count">{{len .Rows}}</span><span class="section-actions"><a class="btn btn-sm btn-ghost" href="/tv">Back to TV</a></span></div>
+{{if .Notice}}<p class="indexer-test ok">{{.Notice}}</p>{{end}}
+<p class="notice">Click a season to monitor or unmonitor it. Tick series to change their monitoring together with the bar at the bottom.</p>
+<div class="library-toolbar"><input class="library-search" id="season-pass-search" type="search" placeholder="Filter series…" aria-label="Filter series"><span class="library-shown" id="season-pass-shown"></span></div>
+<form id="season-pass-form" hx-post="/tv/seasonpass" hx-target="#season-pass-result" hx-swap="innerHTML">
+<table class="data-table season-pass">
+  <thead><tr><th class="col-tight"><input type="checkbox" id="season-pass-all" aria-label="Select all shown"></th><th>Monitored</th><th>Series</th><th>Seasons</th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+  <tr data-title="{{.Title}}">
+    <td class="col-tight"><input type="checkbox" name="id" value="{{.ID}}" class="season-pass-check" aria-label="Select {{.Title}}"></td>
+    <td>{{template "monitored_chip" .MonitoredChip}}</td>
+    <td><a href="/tv/{{.Slug}}">{{.Title}}</a></td>
+    <td class="season-chips">{{range .Chips}}{{template "season_pass_chip" .}}{{else}}<span class="card-sub">No seasons yet</span>{{end}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4" class="notice">No TV series added yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+<div class="editor-bar">
+  <span class="editor-count" id="season-pass-count">0 selected</span>
+  <label class="release-filter-label">Monitored <select class="select" name="monitored"><option value="">No Change</option><option value="true">Monitored</option><option value="false">Unmonitored</option></select></label>
+  <label class="release-filter-label">Monitor <select class="select" name="monitor"><option value="">No Change</option>{{range .MonitorOptions}}<option value="{{.Value}}" title="{{.Help}}">{{.Label}}</option>{{end}}</select></label>
+  <span class="manage-spacer"></span>
+  <button class="btn btn-sm" type="submit">Save</button>
+</div>
+<div id="season-pass-result"></div>
+</form>
+<script>
+(function () {
+  var search = document.getElementById('season-pass-search'), all = document.getElementById('season-pass-all');
+  var count = document.getElementById('season-pass-count'), shown = document.getElementById('season-pass-shown');
+  var rows = Array.prototype.slice.call(document.querySelectorAll('table.season-pass tbody tr[data-title]'));
+  function update() {
+    count.textContent = document.querySelectorAll('.season-pass-check:checked').length + ' selected';
+  }
+  search.addEventListener('input', function () {
+    var q = search.value.toLowerCase(), visible = 0;
+    rows.forEach(function (row) { row.hidden = q && row.dataset.title.toLowerCase().indexOf(q) < 0; if (!row.hidden) visible++; });
+    shown.textContent = visible === rows.length ? '' : visible + ' of ' + rows.length;
+  });
+  all.addEventListener('change', function () {
+    rows.forEach(function (row) { if (!row.hidden) row.querySelector('.season-pass-check').checked = all.checked; });
+    update();
+  });
+  document.querySelector('table.season-pass').addEventListener('change', function (e) { if (e.target.classList.contains('season-pass-check')) update(); });
+})();
+</script>
+{{end}}

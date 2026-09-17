@@ -1,0 +1,132 @@
+{{define "series_manage_episodes"}}
+<form class="mm-form manage-episodes" id="manage-episodes" hx-post="/tv/{{.Series.ID}}/manage-episodes" hx-target="#manage-episodes-result" hx-swap="innerHTML" data-episodes='{{.EpisodesJSON}}'>
+  <div class="guide-head">
+    <h2>Manage Episodes - {{.Series.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    {{if .Files}}
+    <table class="data-table manage-table">
+      <thead><tr>
+        <th class="col-tight"><input type="checkbox" id="manage-all" aria-label="Select all" checked></th>
+        <th data-sort="text">Relative Path</th>
+        <th data-sort="number">Season</th>
+        <th data-sort="text">Episodes</th>
+        <th data-sort="text">Release Group</th>
+        <th data-sort="text">Quality</th>
+        <th data-sort="text">Languages</th>
+        <th data-sort="number">Size</th>
+        <th data-sort="text">Release Type</th>
+      </tr></thead>
+      <tbody>
+        {{range .Files}}
+        <tr data-file="{{.ID}}" data-season="{{.SeasonNumber}}" data-episodes="{{.Episodes}}">
+          <td class="col-tight"><input type="checkbox" name="file_id" value="{{.ID}}" aria-label="Select file" checked></td>
+          <td class="manage-path">{{.RelativePath}}</td>
+          <td data-field="season">{{.SeasonNumber}}</td>
+          <td data-field="episodes">{{.EpisodeFileDetail.Episodes}}</td>
+          <td data-field="group">{{.ReleaseGroup}}</td>
+          <td data-field="quality"><span class="quality-pill">{{.Quality}}</span></td>
+          <td data-field="languages">{{.Languages}}</td>
+          <td data-value="{{.Size}}">{{.SizeHuman}}</td>
+          <td data-field="release_type">{{.ReleaseTypeLabel}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <div id="manage-episodes-result"></div>
+    <div class="manage-bar">
+      <button class="btn btn-sm btn-danger" type="button" id="manage-delete" hx-post="/tv/{{.Series.ID}}/manage-episodes/delete" hx-include="#manage-episodes input[name=file_id]" hx-target="#manage-episodes-result" hx-swap="innerHTML" hx-confirm="Delete the ticked files from disk? They go to the recycle bin when one is set under Media Management.">Delete</button>
+      <select class="select" id="manage-select" aria-label="Bulk edit the ticked files">
+        <option value="">Select...</option>
+        <option value="season">Select Season</option>
+        <option value="episodes">Select Episode(s)</option>
+        <option value="quality">Select Quality</option>
+        <option value="group">Select Release Group</option>
+        <option value="languages">Select Language</option>
+        <option value="release_type">Select Release Type</option>
+      </select>
+      <span id="manage-chooser" class="manage-chooser" hidden></span>
+      <span class="manage-spacer"></span>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+      <button class="btn btn-sm btn-import" type="submit" id="manage-import" disabled>Import</button>
+    </div>
+    <template id="manage-qualities">{{range .Qualities}}<option value="{{.}}">{{.}}</option>{{end}}</template>
+    <template id="manage-release-types">{{range .ReleaseTypes}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</template>
+    {{else}}
+    <p class="notice">This series has no episode files.</p>
+    {{end}}
+  </div>
+</form>
+<script>
+// Sonarr's Manage Episodes: pick an edit from Select..., choose a value, and
+// every ticked row takes it. Nothing is saved until Import.
+(function () {
+  var form = document.getElementById('manage-episodes');
+  if (!form || form.dataset.bound) return;
+  form.dataset.bound = '1';
+  var episodes = {};
+  try { episodes = JSON.parse(form.dataset.episodes || '{}'); } catch (e) {}
+  var all = document.getElementById('manage-all'), select = document.getElementById('manage-select'),
+      chooser = document.getElementById('manage-chooser'), importBtn = document.getElementById('manage-import');
+  var pending = {};
+  var LABELS = {'': 'Unknown', singleEpisode: 'Single Episode', multiEpisode: 'Multi-Episode', seasonPack: 'Season Pack'};
+  all.addEventListener('change', function () { form.querySelectorAll('input[name=file_id]').forEach(function (c) { c.checked = all.checked; }); });
+  function ticked() { return Array.prototype.slice.call(form.querySelectorAll('input[name=file_id]:checked')).map(function (c) { return c.closest('tr'); }); }
+  function stage(row, field, value, text) {
+    var id = row.dataset.file;
+    pending[id] = pending[id] || {};
+    pending[id][field] = value;
+    var cell = row.querySelector('[data-field=' + field + ']');
+    if (cell) { cell.textContent = text; cell.classList.add('manage-changed'); }
+    var input = form.querySelector('input[name="f' + id + '_' + field + '"]');
+    if (!input) { input = document.createElement('input'); input.type = 'hidden'; input.name = 'f' + id + '_' + field; form.appendChild(input); }
+    input.value = value;
+    importBtn.disabled = false;
+  }
+  function seasonOf(row) { return (pending[row.dataset.file] && pending[row.dataset.file].season) || row.dataset.season; }
+  function episodeLabel(season, numbers) {
+    var list = episodes[season] || [], titles = numbers.map(function (n) { var e = list.filter(function (x) { return x.n === n; })[0]; return e ? e.t : ''; });
+    var range = numbers.length > 1 ? numbers[0] + '-' + numbers[numbers.length - 1] : String(numbers[0] || '');
+    return range + (titles.join('').trim() ? ' - ' + titles.join(' / ') : '');
+  }
+  function build(kind) {
+    chooser.innerHTML = '';
+    chooser.hidden = false;
+    var rows = ticked();
+    if (!rows.length) { chooser.innerHTML = '<span class="setting-help">Tick at least one file first.</span>'; return; }
+    var input, apply = document.createElement('button');
+    apply.type = 'button'; apply.className = 'btn btn-sm'; apply.textContent = 'Apply';
+    if (kind === 'season') {
+      input = document.createElement('select'); input.className = 'select';
+      Object.keys(episodes).map(Number).sort(function (a, b) { return a - b; }).forEach(function (s) { var o = document.createElement('option'); o.value = s; o.textContent = s === 0 ? 'Specials' : 'Season ' + s; input.appendChild(o); });
+      input.value = seasonOf(rows[0]);
+      apply.onclick = function () { rows.forEach(function (row) { stage(row, 'season', input.value, input.value); }); };
+    } else if (kind === 'episodes') {
+      var season = seasonOf(rows[0]);
+      input = document.createElement('select'); input.className = 'select'; input.multiple = true; input.size = Math.min(8, (episodes[season] || []).length || 1);
+      (episodes[season] || []).forEach(function (e) { var o = document.createElement('option'); o.value = e.n; o.textContent = e.n + (e.t ? ' - ' + e.t : ''); input.appendChild(o); });
+      apply.onclick = function () {
+        var numbers = Array.prototype.slice.call(input.selectedOptions).map(function (o) { return Number(o.value); });
+        if (!numbers.length) return;
+        rows.forEach(function (row) { stage(row, 'episodes', numbers.join(','), episodeLabel(seasonOf(row), numbers)); });
+      };
+    } else if (kind === 'quality' || kind === 'release_type') {
+      input = document.createElement('select'); input.className = 'select';
+      input.innerHTML = document.getElementById(kind === 'quality' ? 'manage-qualities' : 'manage-release-types').innerHTML;
+      apply.onclick = function () { rows.forEach(function (row) { stage(row, kind, input.value, kind === 'quality' ? input.value : LABELS[input.value]); }); };
+    } else {
+      input = document.createElement('input'); input.type = 'text'; input.className = 'library-search';
+      input.placeholder = kind === 'group' ? 'Release group' : 'e.g. English, French';
+      apply.onclick = function () { rows.forEach(function (row) { stage(row, kind, input.value, input.value); }); };
+    }
+    chooser.appendChild(input); chooser.appendChild(apply);
+    if (input.focus) input.focus();
+  }
+  select.addEventListener('change', function () { if (select.value) build(select.value); else { chooser.hidden = true; chooser.innerHTML = ''; } });
+  form.addEventListener('submit', function (e) {
+    if (importBtn.disabled) e.preventDefault();
+  });
+})();
+</script>
+{{end}}

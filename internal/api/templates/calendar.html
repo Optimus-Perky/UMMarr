@@ -1,0 +1,45 @@
+{{define "content"}}
+<div class="section-head"><h2>Calendar</h2><span class="section-count">{{.Total}}</span></div>
+<div class="library-toolbar calendar-toolbar">
+  <a class="btn btn-sm btn-ghost" href="/calendar?month={{.PrevMonth}}" aria-label="Previous month">←</a>
+  <span class="calendar-month">{{.MonthLabel}}</span>
+  <a class="btn btn-sm btn-ghost" href="/calendar?month={{.NextMonth}}" aria-label="Next month">→</a>
+  <a class="btn btn-sm btn-ghost" href="/calendar?month={{.ThisMonth}}">Today</a>
+  <span class="manage-spacer"></span>
+  <label class="setting-check"><input type="checkbox" class="calendar-toggle" data-kind="movie" checked> Movies ({{index .Counts "movie"}})</label>
+  <label class="setting-check calendar-sub-toggle"><input type="checkbox" class="calendar-toggle" data-kind="cinema" checked> In Cinemas ({{index .Counts "cinema"}})</label>
+  <label class="setting-check calendar-sub-toggle"><input type="checkbox" class="calendar-toggle" data-kind="digital" checked> Digital ({{index .Counts "digital"}})</label>
+  <label class="setting-check calendar-sub-toggle"><input type="checkbox" class="calendar-toggle" data-kind="physical" checked> Physical ({{index .Counts "physical"}})</label>
+  <label class="setting-check"><input type="checkbox" class="calendar-toggle" data-kind="series" checked> TV ({{index .Counts "series"}})</label>
+  <label class="setting-check"><input type="checkbox" class="calendar-toggle" data-kind="music" checked> Music ({{index .Counts "music"}})</label>
+  <label class="setting-check"><input type="checkbox" class="calendar-toggle" data-kind="unmonitored"> Unmonitored</label>
+</div>
+<div class="calendar" id="calendar">
+  <div class="calendar-head">{{range .Weekdays}}<span>{{.}}</span>{{end}}</div>
+  {{range .Weeks}}
+  <div class="calendar-week">
+    {{range .}}
+    <div class="calendar-day{{if not .InMonth}} calendar-other{{end}}{{if .Today}} calendar-today{{end}}">
+      <div class="calendar-date">{{.Day}}</div>
+      {{range .Entries}}{{template "calendar_entry" .}}{{end}}
+      {{if .More}}<details class="calendar-more"><summary>+{{len .More}} more</summary>{{range .More}}{{template "calendar_entry" .}}{{end}}</details>{{end}}
+    </div>
+    {{end}}
+  </div>
+  {{end}}
+</div>
+<p class="notice calendar-key">
+  <span class="calendar-entry entry-series entry-done">In the library</span>
+  <span class="calendar-entry entry-series entry-missing">Due, not downloaded</span>
+  <span class="calendar-entry entry-series entry-unreleased">Still to come</span>
+  <span class="calendar-entry entry-series entry-unmonitored">Unmonitored</span>
+</p>
+{{end}}
+
+{{define "calendar_entry"}}
+<a class="calendar-entry entry-{{.Kind}} entry-{{.StatusClass}}" href="{{.URL}}" data-kind="{{.Kind}}" data-event="{{.Event}}" data-monitored="{{if .Monitored}}1{{else}}0{{end}}" title="{{.Title}}{{if .Subtitle}} - {{.Subtitle}}{{end}} ({{.Label}})">
+  <span class="entry-label">{{.Label}}</span>
+  <span class="entry-title">{{.Title}}</span>
+  {{if .Subtitle}}<span class="entry-sub">{{.Subtitle}}</span>{{end}}
+</a>
+{{end}}

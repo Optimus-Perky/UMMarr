@@ -1,0 +1,18 @@
+{{define "episode_row"}}
+<tr id="episode-row-{{.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  <td class="col-tight">{{template "monitored_chip" .MonitoredChip}}</td>
+  <td>{{.EpisodeNumber}}</td>
+  <td><a class="episode-link" href="#" hx-get="/tv/{{.SeriesID}}/episodes/{{.ID}}" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Episode details">{{.Title}}</a></td>
+  <td data-col="airdate">{{.AirDate}}</td>
+  <td data-col="size" data-value="{{.SizeBytes}}">{{.SizeHuman}}</td>
+  <td data-col="group">{{.ReleaseGroup}}</td>
+  <td data-col="quality">{{if .HasFile}}<span class="quality-pill">{{if .Quality}}{{.Quality}}{{else}}Unknown{{end}}</span>{{end}}</td>
+  <td data-col="videocodec">{{.MediaInfo.VideoCodec}}</td>
+  <td data-col="audioinfo">{{.MediaInfo.AudioShort}}</td>
+  <td data-col="dynamicrange">{{.MediaInfo.DynamicRange}}</td>
+  <td data-col="audiolangs">{{.MediaInfo.Languages}}</td>
+  <td data-col="subtitles">{{if .MediaInfo.SubtitlesMore}}<details class="lang-list"><summary>{{.MediaInfo.SubtitlesFirst}} <span class="lang-more">+{{.MediaInfo.SubtitlesMore}}</span></summary>{{.MediaInfo.Subtitles}}</details>{{else}}{{.MediaInfo.Subtitles}}{{end}}</td>
+  <td data-col="status" id="episode-status-{{.ID}}"><span class="chip {{if .HasFile}}chip-good{{else if eq .FileStatus "Downloading"}}chip-info{{else if eq .FileStatus "Unreleased"}}chip-muted{{else}}chip-warn{{end}}">{{.FileStatus}}</span></td>
+  <td class="col-actions">{{if .HasIndexer}}<button class="icon-btn" type="button" hx-post="/tv/{{.SeriesID}}/episodes/{{.ID}}/search" hx-target="#episode-releases-{{.ID}}" hx-swap="innerHTML" title="Automatic search: grab what UMMarr would accept">{{template "icon_bolt"}}</button><button class="icon-btn" type="button" hx-get="/tv/{{.SeriesID}}/episodes/{{.ID}}/releases" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Search for releases">{{template "icon_search"}}</button>{{end}}</td>
+</tr>
+{{end}}

@@ -1,0 +1,24 @@
+{{define "fix_match"}}
+<div class="guide-head">
+  <h2>Fix match - {{.Title}}</h2>
+  <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+</div>
+<div class="guide-body">
+  <p class="notice">Pick the {{.Provider}} entry this {{.Noun}} really is. Its folder, files, monitoring and quality profile stay; the details come from the new match.</p>
+  <input class="library-search" style="max-width:none;margin:8px 0" type="search" name="q" value="{{.Query}}" placeholder="Search {{.Provider}}…" aria-label="Search {{.Provider}}" hx-get="{{.SearchURL}}" hx-trigger="load, input changed delay:300ms, search" hx-target="#fix-match-results" hx-swap="innerHTML">
+  <div id="fix-match-notice"></div>
+  <div id="fix-match-results"></div>
+</div>
+{{end}}
+
+{{define "fix_match_results"}}
+{{range .Results}}
+<div class="result">
+  <div class="result-poster">{{.Initial}}</div>
+  <div><div class="result-title">{{.Title}}</div><div class="result-meta"><span class="result-year">{{.Sub}}</span></div></div>
+  <div class="result-actions"><button class="btn btn-sm" type="button" hx-post="{{$.ApplyURL}}" hx-vals='{"id":"{{.ID}}"}' hx-target="#fix-match-notice" hx-swap="innerHTML" hx-confirm="Use {{.Title}} for this {{$.Noun}}?">Use this</button></div>
+</div>
+{{else}}
+{{if .Err}}<p class="notice" style="color:var(--warn)">Search failed: {{.Err}}</p>{{else if .Query}}<p class="notice">No results.</p>{{end}}
+{{end}}
+{{end}}

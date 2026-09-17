@@ -1,0 +1,74 @@
+{{define "release_results"}}
+{{$grabURL := .GrabURL}}
+{{range .IndexerErrors}}<p class="notice" style="color:var(--warn)">{{if .Indexer}}{{.Indexer}}: {{end}}{{.Message}}</p>{{end}}
+{{if .Results}}
+<div class="col-picker" data-for="releases">
+  <button class="icon-btn" type="button" title="Table options">{{template "icon_gear"}}</button>
+  <div class="col-picker-panel" hidden>
+    <label><input type="checkbox" data-col="source" checked> Source</label>
+    <label><input type="checkbox" data-col="age" checked> Age</label>
+    <label><input type="checkbox" data-col="indexer" checked> Indexer</label>
+    <label><input type="checkbox" data-col="category" checked> Category</label>
+    <label><input type="checkbox" data-col="group" checked> Release Group</label>
+    <label><input type="checkbox" data-col="quality" checked> Quality</label>
+    <label><input type="checkbox" data-col="score" checked> Score</label>
+    <label><input type="checkbox" data-col="formats" checked> Formats</label>
+    <label><input type="checkbox" data-col="size" checked> Size</label>
+    <label><input type="checkbox" data-col="peers" checked> Peers</label>
+    <label><input type="checkbox" data-col="languages" checked> Languages</label>
+    <label><input type="checkbox" data-col="flags" checked> Flags</label>
+  </div>
+</div>
+<table class="data-table" data-table-id="releases">
+  <thead>
+    <tr>
+      <th class="release-status-head"><span class="visually-hidden">Status</span></th>
+      <th data-sort="text" data-col="source">Source</th>
+      <th data-sort="number" data-col="age">Age</th>
+      <th data-sort="text">Title</th>
+      <th data-sort="text" data-col="indexer">Indexer</th>
+      <th data-sort="text" data-col="category">Category</th>
+      <th data-sort="text" data-col="group">Release Group</th>
+      <th data-sort="text" data-col="quality">Quality</th>
+      <th data-sort="number" data-col="score" title="Preferred Words plus custom format scores">Score</th>
+      <th data-sort="text" data-col="formats" title="Settings &rarr; Custom Formats">Formats</th>
+      <th data-sort="number" data-col="size">Size</th>
+      <th data-sort="number" data-col="peers">Peers</th>
+      <th data-sort="text" data-col="languages">Languages</th>
+      <th data-col="flags">Flags</th>
+      <th></th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Results}}
+    <tr data-approved="{{if .Rejections}}0{{else}}1{{end}}" data-protocol="{{.Protocol}}" data-title="{{.Title}}" data-indexer="{{.Indexer}}" data-quality="{{.Quality}}" data-group="{{.ReleaseGroup}}" data-languages="{{.Languages}}" data-flags="{{range $i, $f := .Flags}}{{if $i}}, {{end}}{{$f}}{{end}}" data-size="{{.Size}}" data-seeders="{{.Seeders}}" data-age="{{.AgeMinutes}}" data-seasonpack="{{if .SeasonPack}}1{{else}}0{{end}}">
+      <td class="release-status">{{if .Rejections}}<details class="release-rejections"><summary title="{{range $i, $r := .Rejections}}{{if $i}}&#10;{{end}}{{$r}}{{end}}" aria-label="Why UMMarr wouldn't grab this">!</summary><ul>{{range .Rejections}}<li>{{.}}</li>{{end}}</ul></details>{{end}}</td>
+      <td data-col="source"><span class="chip {{if eq .Protocol "torrent"}}chip-good{{else}}chip-info{{end}}">{{.Protocol}}</span></td>
+      <td data-col="age" data-value="{{.AgeMinutes}}">{{.Age}}</td>
+      <td>{{if .InfoURL}}<a href="{{.InfoURL}}" target="_blank" rel="noopener">{{.Title}}</a>{{else}}{{.Title}}{{end}}{{if .SeasonPack}} <span class="chip chip-muted">Season pack</span>{{end}}</td>
+      <td data-col="indexer">{{.Indexer}}</td>
+      <td data-col="category">{{.Categories}}</td>
+      <td data-col="group">{{.ReleaseGroup}}</td>
+      <td data-col="quality">{{if .Quality}}<span class="chip chip-info">{{.Quality}}</span>{{end}}</td>
+      <td data-col="score" data-value="{{.TotalScore}}">{{if .TotalScore}}<span class="chip {{if gt .TotalScore 0}}chip-good{{else}}chip-warn{{end}}" title="Preferred words {{.KeywordScore}}, custom formats {{.FormatScore}}">{{if gt .TotalScore 0}}+{{end}}{{.TotalScore}}</span>{{end}}</td>
+      <td data-col="formats">{{range .CustomFormats}}<span class="chip chip-muted">{{.}}</span> {{end}}</td>
+      <td data-col="size" data-value="{{.Size}}">{{.SizeHuman}}</td>
+      <td data-col="peers" data-value="{{.Seeders}}">{{if eq .Protocol "torrent"}}<span class="peers {{.PeersClass}}">{{.Seeders}} / {{.Leechers}}</span>{{end}}</td>
+      <td data-col="languages">{{.Languages}}</td>
+      <td data-col="flags">{{range .Flags}}<span class="chip chip-muted">{{.}}</span> {{end}}</td>
+      <td>
+        <form hx-post="{{$grabURL}}" hx-target="closest tr" hx-swap="outerHTML">
+          <input type="hidden" name="indexer_id" value="{{.IndexerID}}">
+          <input type="hidden" name="guid" value="{{.GUID}}">
+          <button class="btn btn-sm" type="submit" {{if not .Grabbable}}disabled title="No enabled download client for this protocol"{{end}}>Grab</button>
+        </form>
+      </td>
+    </tr>
+    {{end}}
+  </tbody>
+</table>
+{{else}}
+{{if .Err}}<p class="notice" style="color:var(--warn)">Search failed: {{.Err}}</p>
+{{else if not .IndexerErrors}}<p class="notice">No releases found.</p>{{end}}
+{{end}}
+{{end}}

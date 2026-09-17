@@ -1,0 +1,54 @@
+{{define "release_dialog"}}
+<div class="guide-head">
+  <h2>{{.Heading}}</h2>
+  <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+</div>
+<div class="dialog-tabs" role="tablist">
+  <button type="button" class="dialog-tab{{if eq .ActiveTab "details"}} active{{end}}" data-tab="details">Details</button>
+  <button type="button" class="dialog-tab{{if eq .ActiveTab "history"}} active{{end}}" data-tab="history">History</button>
+  <button type="button" class="dialog-tab{{if or (eq .ActiveTab "search") (eq .ActiveTab "")}} active{{end}}" data-tab="search">Search</button>
+</div>
+<div class="guide-body">
+  <section class="dialog-pane" data-pane="details"{{if ne .ActiveTab "details"}} hidden{{end}}>
+    <dl class="detail-list">
+      {{range .Details}}<dt>{{.Label}}</dt><dd>{{.Value}}</dd>{{end}}
+    </dl>
+    {{if .Overview}}<p class="detail-overview" style="margin-top:14px">{{.Overview}}</p>{{end}}
+    {{if .Files}}
+    <table class="data-table" style="margin-top:14px">
+      <thead><tr><th>Path</th><th>Size</th><th>Languages</th><th>Quality</th><th>Video</th><th>Audio</th><th>Subtitles</th><th>Release Group</th><th>Added</th></tr></thead>
+      <tbody>{{range .Files}}<tr><td>{{.Path}}</td><td>{{.SizeHuman}}</td><td>{{.Languages}}</td><td>{{if .Quality}}<span class="quality-pill">{{.Quality}}</span>{{end}}</td><td>{{if .MediaInfo.Video}}{{.MediaInfo.Video}}{{else}}{{.Codec}}{{end}}</td><td>{{.MediaInfo.Audio}}</td><td>{{if .MediaInfo.SubtitlesMore}}<details class="lang-list"><summary>{{.MediaInfo.SubtitlesFirst}} <span class="lang-more">+{{.MediaInfo.SubtitlesMore}}</span></summary>{{.MediaInfo.Subtitles}}</details>{{else}}{{.MediaInfo.Subtitles}}{{end}}</td><td>{{.Group}}</td><td>{{.Added}}</td></tr>{{end}}</tbody>
+    </table>
+    {{range .Files}}{{if .MediaInfo.Details}}<p class="notice media-details">{{.MediaInfo.Details}}</p>{{end}}{{if .MediaInfo.Note}}<p class="notice media-details">{{.MediaInfo.Note}}</p>{{end}}{{end}}
+    {{end}}
+  </section>
+  <section class="dialog-pane" data-pane="history"{{if ne .ActiveTab "history"}} hidden{{end}}>
+    {{if .History}}
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>Release</th><th>Indexer</th><th>Status</th><th>By</th></tr></thead>
+      <tbody>{{range .History}}<tr><td>{{.When}}</td><td>{{.Release}}</td><td>{{.Indexer}}</td><td><span class="chip chip-info">{{.Status}}</span></td><td>{{.GrabbedBy}}</td></tr>{{end}}</tbody>
+    </table>
+    {{else}}<p class="notice">Nothing has been grabbed for this yet.</p>{{end}}
+  </section>
+  <section class="dialog-pane" data-pane="search"{{if and (ne .ActiveTab "search") (ne .ActiveTab "")}} hidden{{end}}>
+    {{if .Results}}
+    <div class="release-toolbar">
+      <span class="custom-filter-slot"></span>
+      <label class="release-filter-label">Filter
+        <select class="release-filter" data-default="{{.DefaultFilter}}">
+          <option value="all"{{if eq .DefaultFilter "all"}} selected{{end}}>All</option>
+          <option value="approved">Approved only</option>
+          <option value="rejected">Rejected only</option>
+          <option value="season-pack"{{if eq .DefaultFilter "season-pack"}} selected{{end}}>Season packs</option>
+          <option value="not-season-pack">Not season packs</option>
+          <option value="torrent">Torrents only</option>
+          <option value="usenet">Usenet only</option>
+          <option value="custom">Custom filter…</option>
+        </select>
+      </label>
+    </div>
+    {{end}}
+    {{if .SearchURL}}<p class="notice">Search every enabled indexer for this episode and judge the results.</p><button class="btn btn-sm" type="button" hx-get="{{.SearchURL}}" hx-target="#release-dialog-body" hx-swap="innerHTML">Search now</button>{{else}}{{template "release_results" .}}{{end}}
+  </section>
+</div>
+{{end}}

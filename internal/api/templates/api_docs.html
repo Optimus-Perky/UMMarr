@@ -1,0 +1,50 @@
+{{define "content"}}
+<div class="section-head"><h2>API</h2><span class="notice">build {{.Version}}</span></div>
+<div class="panel">
+  <p class="notice">JSON under <code>/api/v3</code>, shaped like Radarr and Sonarr's. Send the API key from Settings → General as the <code>X-Api-Key</code> header or <code>?apikey=</code>; a signed-in browser session works too. Ids are UMMarr's; <code>tmdbId</code> / <code>foreignArtistId</code> / <code>foreignAlbumId</code> are the provider's.</p>
+  <table class="data-table">
+    <thead><tr><th>Method</th><th>Path</th><th>What it does</th></tr></thead>
+    <tbody>
+      <tr><td colspan="3"><strong>Movies</strong></td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/movie</td><td>Every movie</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/movie/{id}</td><td>One movie with its file</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/movie/lookup?term=</td><td>Search TMDB</td></tr>
+      <tr><td>POST</td><td class="mono">/api/v3/movie</td><td><code>{"tmdbId", "rootFolderId"?, "qualityProfileId"?, "monitored"?, "searchForMovie"?}</code></td></tr>
+      <tr><td>PUT</td><td class="mono">/api/v3/movie/{id}</td><td><code>{"monitored"}</code></td></tr>
+      <tr><td>DELETE</td><td class="mono">/api/v3/movie/{id}?deleteFiles=true</td><td>Remove, optionally with its folder</td></tr>
+      <tr><td colspan="3"><strong>TV</strong></td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/series</td><td>Every series</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/series/{id}</td><td>One series with its seasons</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/series/lookup?term=</td><td>Search TMDB</td></tr>
+      <tr><td>POST</td><td class="mono">/api/v3/series</td><td><code>{"tmdbId", "rootFolderId"?, "qualityProfileId"?, "monitored"?}</code></td></tr>
+      <tr><td>PUT</td><td class="mono">/api/v3/series/{id}</td><td><code>{"monitored"?, "seasons": [{"seasonNumber", "monitored"}]?}</code></td></tr>
+      <tr><td>DELETE</td><td class="mono">/api/v3/series/{id}?deleteFiles=true</td><td>Remove, optionally with its folder</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/episode?seriesId=</td><td>A series' episodes</td></tr>
+      <tr><td>PUT</td><td class="mono">/api/v3/episode/{id}</td><td><code>{"monitored"}</code></td></tr>
+      <tr><td colspan="3"><strong>Music</strong></td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/artist</td><td>Every artist</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/artist/lookup?term=</td><td>Search MusicBrainz</td></tr>
+      <tr><td>POST</td><td class="mono">/api/v3/artist</td><td><code>{"foreignArtistId", "rootFolderId"?, "qualityProfileId"?}</code></td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/album</td><td>Every album</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/album/{id}</td><td>One album with its tracks</td></tr>
+      <tr><td>POST</td><td class="mono">/api/v3/album</td><td><code>{"foreignAlbumId", "artistId"}</code></td></tr>
+      <tr><td>PUT</td><td class="mono">/api/v3/album/{id}</td><td><code>{"monitored"}</code></td></tr>
+      <tr><td>DELETE</td><td class="mono">/api/v3/album/{id}?deleteFiles=true</td><td>Remove, optionally with its folder</td></tr>
+      <tr><td colspan="3"><strong>Activity & settings</strong></td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/queue</td><td>Grabs in progress (<code>?all=true</code> for everything)</td></tr>
+      <tr><td>DELETE</td><td class="mono">/api/v3/queue/{id}</td><td>Remove a grab: <code>removeFromClient</code> (default true), <code>blocklist</code>, <code>skipRedownload</code></td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/blocklist</td><td>Blocklisted releases, paged (<code>page</code>, <code>pageSize</code>)</td></tr>
+      <tr><td>DELETE</td><td class="mono">/api/v3/blocklist/{id}</td><td>Remove a release from the blocklist</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/history?page=&pageSize=&eventType=&mediaType=&q=</td><td>History, newest first</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/qualityprofile</td><td>Quality profiles with their items</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/rootfolder</td><td>Library folders</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/downloadclient</td><td>Download clients (no secrets)</td></tr>
+      <tr><td>GET/POST/PUT/DELETE</td><td class="mono">/api/v3/indexer, /indexer/schema, /indexer/test</td><td>Indexers, as Prowlarr's Radarr sync uses them</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/health</td><td>Current health issues</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/system/status</td><td>Version, build and URL base</td></tr>
+      <tr><td>GET</td><td class="mono">/api/v3/command</td><td>Scheduled tasks and their state</td></tr>
+      <tr><td>POST</td><td class="mono">/api/v3/command</td><td><code>{"name": "RssSync" | "RefreshMonitoredDownloads" | "Backup" | "CheckHealth" | "LibraryScan" | "ApplicationUpdateCheck" | "MoviesSearch" + movieIds | "SeriesSearch" + seriesId | "AlbumSearch" + albumIds | "MissingMoviesSearch" | "MissingEpisodeSearch" | "MissingAlbumSearch" | "CutoffUnmetMoviesSearch" | "CutoffUnmetEpisodeSearch"}</code></td></tr>
+    </tbody>
+  </table>
+</div>
+{{end}}

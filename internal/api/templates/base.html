@@ -1,0 +1,50 @@
+{{define "base"}}
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>UMMarr{{if .PageTitle}} · {{.PageTitle}}{{end}}</title>
+  <link rel="icon" href="/static/favicon.ico" sizes="any">
+  <link rel="icon" href="/static/ummarr.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="/static/ummarr-256.png">
+  <link rel="stylesheet" href="/static/style.css">
+  <script src="/static/htmx.min.js"></script>
+  <script src="/static/htmx-errors.js"></script>
+  <script src="/static/sortable-table.js"></script>
+  <script src="/static/column-picker.js"></script>
+  <script src="/static/release-dialog.js" defer></script>
+  <script src="/static/poster-options.js" defer></script>
+  <script src="/static/library-grid.js" defer></script>
+  <script src="/static/library-views.js" defer></script>
+  <script src="/static/calendar.js" defer></script>
+</head>
+<body>
+  <div class="shell">
+    <aside class="sidebar">
+      <a class="brand brand-header-link" href="/" title="UMMarr">
+        <img class="brand-header" src="/static/header.png" alt="UMMarr - Unified Media Manager">
+      </a>
+      <nav class="nav">
+        <a href="/" class="{{if eq .Active "home"}}active{{end}}">Home</a>
+        <a href="/movies" class="{{if eq .Active "movies"}}active{{end}}">Movies</a>
+        <a href="/tv" class="{{if eq .Active "tv"}}active{{end}}">TV Series</a>
+        <a href="/music" class="{{if eq .Active "music"}}active{{end}}">Music</a>
+        <a href="/calendar" class="{{if eq .Active "calendar"}}active{{end}}">Calendar</a>
+        <a href="/activity" class="{{if eq .Active "activity"}}active{{end}}">Activity</a>
+        <a href="/history" class="{{if eq .Active "history"}}active{{end}}">History</a>
+        <a href="/system" class="{{if eq .Active "system"}}active{{end}}">System</a>
+        <a href="/settings" class="{{if eq .Active "settings"}}active{{end}}">Settings</a>
+      </nav>
+      <form method="post" action="/logout" style="margin-top:auto">
+        <button class="btn btn-sm btn-ghost btn-block" type="submit">Log out</button>
+      </form>
+    </aside>
+    <main class="main">
+      {{block "content" .}}{{end}}
+    </main>
+    <dialog id="release-dialog" class="guide release-dialog" onclick="if (event.target === this) this.close()"><div id="release-dialog-body"></div></dialog>
+  </div>
+</body>
+</html>
+{{end}}

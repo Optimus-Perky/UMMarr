@@ -1,0 +1,67 @@
+{{define "series_edit"}}
+{{$s := .Settings}}
+<form class="mm-form" hx-post="/tv/{{.Series.ID}}/edit" hx-target="#release-dialog-body" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Edit - {{.Series.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    {{if .Error}}<div class="mm-errors">{{.Error}}</div>{{end}}
+    <div class="setting-row">
+      <div class="setting-label">Monitored</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="monitored"{{if $s.Monitored}} checked{{end}}> Download monitored episodes in this series</label></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Monitor New Seasons</div>
+      <div class="setting-control">
+        <select name="monitor_new_items">
+          <option value="all"{{if ne $s.MonitorNewItems "none"}} selected{{end}}>All Seasons</option>
+          <option value="none"{{if eq $s.MonitorNewItems "none"}} selected{{end}}>None</option>
+        </select>
+        <span class="setting-help">Which new seasons should be monitored automatically</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Use Season Folder</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="season_folder"{{if $s.SeasonFolder}} checked{{end}}> Sort episodes into season folders</label></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Quality Profile</div>
+      <div class="setting-control">
+        <select name="quality_profile_id">
+          {{range .QualityProfiles}}<option value="{{.ID}}"{{if eq .ID $s.QualityProfileID}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Series Type</div>
+      <div class="setting-control">
+        <select name="series_type">
+          <option value="standard"{{if eq $s.SeriesType "standard"}} selected{{end}}>Standard - Season and episode numbers (S01E05)</option>
+          <option value="daily"{{if eq $s.SeriesType "daily"}} selected{{end}}>Daily - Air date (2020-05-25)</option>
+          <option value="anime"{{if eq $s.SeriesType "anime"}} selected{{end}}>Anime - Absolute episode number (005)</option>
+        </select>
+        <span class="setting-help">Series type is used for renaming, parsing and searching. <em>Not active yet:</em> stored now; daily and anime naming come with the naming work.</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Path</div>
+      <div class="setting-control">
+        <input type="text" name="path" value="{{$s.Path}}" class="template">
+        <label class="setting-check"><input type="checkbox" name="move_files" checked> Move the folder and its files when the path changes</label>
+        <span class="setting-help">Untick to only change where UMMarr looks; the files stay where they are.</span>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Tags</div>
+      <div class="setting-control">
+        <input type="text" name="tags" value="{{.Tags}}" placeholder="comma separated, e.g. kids, 4k">
+      </div>
+    </div>
+    <div class="form-row">
+      <button class="btn btn-sm" type="submit">Save</button>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+  </div>
+</form>
+{{end}}

@@ -1,0 +1,31 @@
+{{define "series_monitor"}}
+<form class="mm-form" hx-post="/tv/{{.Series.ID}}/monitor" hx-target="#series-monitor-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Series Monitoring - {{.Series.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <p class="notice">Sets which of this series' episodes are monitored, season by season, the way Sonarr's Series Monitoring does.</p>
+    <div class="setting-row">
+      <div class="setting-label">Monitor</div>
+      <div class="setting-control">
+        <select name="monitor" id="series-monitor-option">
+          {{range .Options}}<option value="{{.Value}}" data-help="{{.Help}}">{{.Label}}</option>{{end}}
+        </select>
+        <span class="setting-help" id="series-monitor-help">{{(index .Options 0).Help}}</span>
+      </div>
+    </div>
+    <div id="series-monitor-result"></div>
+    <div class="form-row">
+      <button class="btn btn-sm" type="submit">Save</button>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+  </div>
+</form>
+<script>
+(function () {
+  var select = document.getElementById('series-monitor-option'), help = document.getElementById('series-monitor-help');
+  if (select && help) select.addEventListener('change', function () { help.textContent = select.options[select.selectedIndex].dataset.help || ''; });
+})();
+</script>
+{{end}}

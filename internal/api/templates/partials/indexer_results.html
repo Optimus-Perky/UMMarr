@@ -1,0 +1,10 @@
+{{define "indexer_test_result"}}
+{{if .OK}}<p class="indexer-test ok">{{if .Message}}{{.Message}}{{else}}Test passed.{{end}}</p>{{else}}<p class="indexer-test failed">{{.Message}}</p>{{end}}
+{{end}}
+
+{{define "indexer_test_all"}}
+<div class="indexer-test-all">
+  {{range .}}<p class="indexer-test {{if .OK}}ok{{else}}failed{{end}}"><strong>{{.Name}}</strong>: {{if .OK}}Test passed.{{else}}{{.Message}}{{end}}</p>
+  {{else}}<p class="notice">No indexers to test.</p>{{end}}
+</div>
+{{end}}

@@ -1,0 +1,70 @@
+{{define "content"}}
+{{$profileID := .Profile.ID}}
+<div class="topbar">
+  <h2 style="flex:1">Quality Profile: {{.Profile.Name}}</h2>
+  <a class="btn btn-sm btn-ghost" href="/settings/profiles">Back to Settings</a>
+</div>
+
+<div class="panel">
+  <p class="notice">Higher weight = more preferred. Unchecked qualities are never grabbed. Automatic search, RSS sync and Search all missing grab the highest-weighted allowed release.</p>
+  <form hx-post="/settings/quality-profiles/{{$profileID}}/items" hx-target="body">
+    <div class="form-row" style="margin-bottom:12px">
+      <label class="setting-check"><input type="checkbox" name="upgrade_allowed"{{if .Profile.UpgradeAllowed}} checked{{end}}> Upgrades allowed - replace a file with a better release until the cutoff is reached</label>
+    </div>
+    <div class="form-row" style="margin-bottom:12px">
+      <label class="release-filter-label">Upgrade until
+        <select class="select" name="cutoff">
+          <option value="">Best allowed quality</option>
+          {{range .Items}}{{if .Allowed}}<option value="{{.Quality}}"{{if eq .Quality $.Profile.Cutoff}} selected{{end}}>{{.Quality}}</option>{{end}}{{end}}
+        </select>
+      </label>
+      <span class="notice">Files at or above this quality are left alone (Radarr's cutoff). Replaced files go to the recycle bin when one is set in Media management, otherwise they are deleted.</span>
+    </div>
+    <table class="data-table">
+      <thead><tr><th>Quality</th><th>Allowed</th><th>Weight</th></tr></thead>
+      <tbody>
+        {{range .Items}}
+        <tr>
+          <td>{{.Quality}}</td>
+          <td><input type="checkbox" name="allowed_{{.Quality}}" {{if .Allowed}}checked{{end}}></td>
+          <td><input type="number" class="select" style="width:80px" name="weight_{{.Quality}}" value="{{.Weight}}"></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <h3 style="margin-top:18px">Custom Formats</h3>
+    {{if .Formats}}
+    <p class="notice">A release's score is the sum of the formats it matches. The score ranks releases alongside Preferred Words, ahead of quality weight.</p>
+    <table class="data-table">
+      <thead><tr><th>Custom Format</th><th>Score</th></tr></thead>
+      <tbody>
+        {{$scores := .Scores.Scores}}
+        {{range .Formats}}
+        <tr>
+          <td>{{.Name}}</td>
+          <td><input type="number" class="select" style="width:90px" name="format_score_{{.ID}}" value="{{index $scores .ID}}"></td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <div class="form-row" style="margin-top:12px">
+      <label class="release-filter-label">Minimum custom format score
+        <input type="number" class="select" style="width:100px" name="min_format_score" value="{{.Scores.MinScore}}">
+      </label>
+      <span class="notice">Releases scoring less than this are never grabbed.</span>
+    </div>
+    <div class="form-row" style="margin-bottom:12px">
+      <label class="release-filter-label">Upgrade until custom format score
+        <input type="number" class="select" style="width:100px" name="cutoff_format_score" value="{{.Scores.CutoffScore}}">
+      </label>
+      <span class="notice">A file at the cutoff quality is still upgraded until its formats reach this score.</span>
+    </div>
+    {{else}}
+    <p class="notice">No custom formats yet - add them under <a href="/settings/custom-formats">Settings → Custom Formats</a> to score releases by release group, source, size, language and so on.</p>
+    {{end}}
+    <div class="form-row">
+      <button class="btn btn-sm" type="submit">Save profile</button>
+    </div>
+  </form>
+</div>
+{{end}}

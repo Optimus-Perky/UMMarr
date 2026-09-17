@@ -1,0 +1,63 @@
+{{define "content"}}
+{{$a := .Artist}}
+<div class="page-toolbar" role="toolbar" aria-label="Artist actions">
+  <button class="tool" type="button" hx-post="/music/artists/{{$a.ID}}/refresh" hx-target="#artist-result" hx-swap="innerHTML" hx-disabled-elt="this" title="Fetch the artist from MusicBrainz again and scan its albums' folders">{{template "icon_refresh"}}<span>Refresh &amp; Scan</span></button>
+  {{if .HasIndexer}}
+  <button class="tool" type="button" hx-post="/music/artists/{{$a.ID}}/search" hx-target="#artist-result" hx-swap="innerHTML" title="Search every monitored album without files and grab what UMMarr would accept">{{template "icon_search_big"}}<span>Search Monitored</span></button>
+  {{end}}
+  <span class="tool-sep"></span>
+  <button class="tool" type="button" hx-get="/music/artists/{{$a.ID}}/metadata" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Where the details came from">{{template "icon_refresh"}}<span>Metadata</span></button>
+  <button class="tool" type="button" hx-get="/music/artists/{{$a.ID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this artist at the right MusicBrainz entry">{{template "icon_target"}}<span>Fix Match</span></button>
+  <a class="tool" href="/history?media=music" title="Everything that happened in the music library">{{template "icon_history"}}<span>History</span></a>
+  <span class="tool-sep"></span>
+  <button class="tool" type="button" hx-get="/music/artists/{{$a.ID}}/edit" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Monitoring, quality profile and path">{{template "icon_wrench"}}<span>Edit</span></button>
+  <button class="tool tool-danger" type="button" hx-get="/music/artists/{{$a.ID}}/delete" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Remove the artist, optionally with its files">{{template "icon_trash"}}<span>Delete</span></button>
+</div>
+
+<div class="detail-head">
+  {{if $a.PosterURL}}<div class="detail-poster" style="background-image:url('{{$a.PosterURL}}')"></div>{{else}}<div class="detail-poster"></div>{{end}}
+  <div>
+    <div class="detail-title">
+      <h1>{{$a.Name}}</h1>
+      {{template "artist_monitored" $a}}
+    </div>
+    <div class="detail-badges">
+      {{if $a.Disambiguation}}<span class="badge">{{$a.Disambiguation}}</span>{{end}}
+      {{range $a.Genres}}<span class="badge">{{.}}</span>{{end}}
+    </div>
+    <div class="detail-meta">
+      {{if $a.Path.Valid}}<div class="field"><span class="label">Path</span>{{$a.Path.String}}</div>{{end}}
+      <div class="field"><span class="label">Albums</span>{{$a.AlbumsWithFiles}} / {{$a.AlbumCount}} with files</div>
+      <div class="field"><span class="label">Tracks</span>{{$a.TracksWithFiles}} / {{$a.TrackCount}}</div>
+      <div class="field"><span class="label">Size</span>{{.SizeHuman}}</div>
+      {{if $a.QualityProfileName}}<div class="field"><span class="label">Quality Profile</span>{{$a.QualityProfileName}}</div>{{end}}
+    </div>
+    {{if $a.Overview}}<p class="detail-overview">{{$a.Overview}}</p>{{end}}
+    {{if .Scanned}}<p class="notice">Scan finished: {{.Scanned}} file(s) imported.</p>{{end}}
+    <div id="artist-result"></div>
+    <div class="detail-actions"><button class="btn btn-sm btn-ghost" hx-get="/music/artists/{{$a.ID}}/albums" hx-target="#release-dialog-body" hx-swap="innerHTML">Browse MusicBrainz for more albums</button></div>
+  </div>
+</div>
+
+<div class="section-head"><h2>Albums</h2><span class="section-count">{{len .Albums}}</span></div>
+<div class="panel">
+  {{if .Albums}}
+  <table class="data-table">
+    <thead><tr><th>Album</th><th>Year</th><th>Tracks</th><th>Monitored</th><th></th></tr></thead>
+    <tbody>
+      {{range .Albums}}
+      <tr>
+        <td><a href="/music/albums/{{.ID}}">{{.Title}}</a>{{if .CompilationSeriesName}} <span class="chip chip-muted">{{.CompilationSeriesName}}</span>{{end}}</td>
+        <td class="nowrap">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</td>
+        <td class="nowrap">{{.Tracks}}</td>
+        <td>{{if .Monitored}}<span class="chip chip-good">Monitored</span>{{else}}<span class="chip chip-warn">Unmonitored</span>{{end}}</td>
+        <td>{{if .HasFiles}}<span class="chip chip-good">Downloaded</span>{{else}}<span class="chip chip-muted">Missing</span>{{end}}</td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{else}}
+  <p class="notice">No albums tracked for this artist yet — browse MusicBrainz above to add some.</p>
+  {{end}}
+</div>
+{{end}}

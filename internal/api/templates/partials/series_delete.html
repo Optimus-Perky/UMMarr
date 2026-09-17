@@ -1,0 +1,27 @@
+{{define "series_delete"}}
+<form class="mm-form" hx-delete="/tv/{{.Series.ID}}" hx-target="#series-delete-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Delete - {{.Series.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <p class="notice">The series folder <code>{{.Series.Path.String}}</code> holds {{.FileCount}} episode file(s), {{.SizeHuman}}.</p>
+    <div class="setting-row">
+      <div class="setting-label">Add List Exclusion</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="add_exclusion"> Prevent series from being added to UMMarr by lists</label></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Delete Files</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="delete_files"> Delete the series folder and its contents</label>
+        <span class="setting-help">The folder is only removed when it sits inside a library folder. Nothing goes to the recycle bin.</span>
+      </div>
+    </div>
+    <div id="series-delete-result"></div>
+    <div class="form-row">
+      <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+      <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    </div>
+  </div>
+</form>
+{{end}}

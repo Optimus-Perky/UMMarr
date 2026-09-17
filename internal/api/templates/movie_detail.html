@@ -1,0 +1,49 @@
+{{define "content"}}
+{{$movie := .Movie}}
+<div class="detail-head">
+  {{if $movie.PosterURL}}<div class="detail-poster" style="background-image:url('{{$movie.PosterURL}}')"></div>
+  {{else}}<div class="detail-poster"></div>{{end}}
+  <div>
+    <div class="detail-title">
+      <h1>{{$movie.Title}}</h1>
+      {{template "monitored_chip" .MonitoredChip}}
+    </div>
+    <div class="detail-badges">
+      {{if $movie.Year.Valid}}<span class="badge">{{$movie.Year.Int64}}</span>{{end}}
+      {{if $movie.Certification.String}}<span class="badge">{{$movie.Certification.String}}</span>{{end}}
+      {{range .Ratings}}<span class="badge">{{.Provider}} {{.Value}}</span>{{end}}
+    </div>
+    <div class="detail-meta">
+      {{if $movie.Path.String}}<div class="field"><span class="label">Path</span>{{$movie.Path.String}}</div>{{end}}
+      <div class="field"><span class="label">Status</span>{{if .File}}Downloaded{{else}}Missing{{end}}</div>
+      {{if .QualityProfileName}}<div class="field"><span class="label">Quality Profile</span>{{.QualityProfileName}}</div>{{end}}
+      {{if .File}}<div class="field"><span class="label">Size</span>{{.File.SizeHuman}}</div>{{end}}
+      {{if $movie.CollectionTitle.String}}<div class="field"><span class="label">Collection</span>{{$movie.CollectionTitle.String}}</div>{{end}}
+      {{if $movie.Studio.String}}<div class="field"><span class="label">Studio</span>{{$movie.Studio.String}}</div>{{end}}
+      {{if $movie.Genres}}<div class="field"><span class="label">Genres</span>{{range $i, $g := $movie.Genres}}{{if $i}}, {{end}}{{$g}}{{end}}</div>{{end}}
+    </div>
+    {{if $movie.Overview.String}}<p class="detail-overview">{{$movie.Overview.String}}</p>{{end}}
+    <div class="detail-actions" id="movie-metadata-actions"><button class="btn btn-sm btn-ghost" hx-post="/movies/{{$movie.ID}}/refresh-metadata" hx-target="#movie-metadata-result" hx-swap="innerHTML" hx-disabled-elt="this" title="Fetch the movie from its metadata providers again">Refresh metadata</button><button class="btn btn-sm btn-ghost" hx-get="/movies/{{$movie.ID}}/metadata" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Where the details came from">Metadata</button><button class="btn btn-sm btn-ghost" hx-get="/movies/{{$movie.ID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this movie at the right TMDB entry">Fix match</button><span id="movie-metadata-result"></span></div>
+  </div>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Files</h2></div>
+  {{if .File}}
+  <table class="data-table">
+    <thead><tr><th>Relative Path</th><th>Size</th><th>Date Added</th><th>Release Group</th><th>Quality</th><th>Video</th><th>Audio</th><th>Languages</th><th>Subtitles</th></tr></thead>
+    <tbody><tr><td>{{.File.RelativePath}}</td><td>{{.File.SizeHuman}}</td><td>{{.File.DateAdded}}</td><td>{{.File.ReleaseGroup}}</td><td>{{if .File.Quality}}<span class="chip chip-info">{{.File.Quality}}</span>{{end}}</td><td>{{.File.MediaInfo.Video}}</td><td>{{.File.MediaInfo.Audio}}</td><td>{{.File.Languages}}</td><td>{{if .File.MediaInfo.SubtitlesMore}}<details class="lang-list"><summary>{{.File.MediaInfo.SubtitlesFirst}} <span class="lang-more">+{{.File.MediaInfo.SubtitlesMore}}</span></summary>{{.File.MediaInfo.Subtitles}}</details>{{else}}{{.File.MediaInfo.Subtitles}}{{end}}</td></tr></tbody>
+  </table>
+  {{with .File.MediaInfo}}{{if .Details}}<p class="notice media-details">{{.Details}}</p>{{end}}{{if .Note}}<p class="notice media-details">{{.Note}}</p>{{end}}{{end}}
+  {{else}}
+  <p class="notice">No file yet.</p>
+  <button class="btn btn-sm btn-ghost" hx-post="/movies/{{$movie.ID}}/refresh" hx-swap="none">Refresh (scan folder for existing file)</button>
+  {{if .ScanNotice}}<p class="indexer-test ok">{{.ScanNotice}}</p>{{end}}
+  {{if .HasIndexer}}
+  <button class="btn btn-sm" hx-get="/movies/{{$movie.ID}}/releases" hx-target="#release-dialog-body" hx-swap="innerHTML">Find release</button>
+  <button class="btn btn-sm btn-ghost" hx-post="/movies/{{$movie.ID}}/search" hx-target="#search-report" hx-swap="innerHTML" title="Search and grab the best release UMMarr would accept">Search Movie</button>
+  <div id="search-report"></div>
+  {{end}}
+  {{end}}
+</div>
+{{end}}

@@ -1,0 +1,37 @@
+{{define "custom_format_form"}}
+{{$f := .Format}}
+<form hx-post="/settings/custom-formats" hx-target="#custom-format-dialog-body" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>{{if .IsNew}}Add Custom Format{{else}}{{$f.Name}}{{end}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    {{if not .IsNew}}<input type="hidden" name="id" value="{{$f.ID}}">{{end}}
+    {{if .Error}}<p class="indexer-test failed">{{.Error}}</p>{{end}}
+    <div class="setting-row">
+      <div class="setting-label">Name</div>
+      <div class="setting-control"><input type="text" name="name" value="{{$f.Name}}" placeholder="e.g. Remux Tier 01" required></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Include when renaming</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="include_when_renaming"{{if $f.IncludeWhenRenaming}} checked{{end}}> Add this format's name to file names</label><span class="setting-help">Movie and episode file names that use the {Custom Formats} token list every matching format with this ticked (Settings → Media Management → naming).</span></div>
+    </div>
+    <h3>Conditions</h3>
+    <table class="data-table">
+      <thead><tr><th>Condition</th><th>Value</th><th></th><th></th><th></th></tr></thead>
+      <tbody id="cf-conditions">{{range .Rows}}{{template "custom_format_condition" .}}{{end}}</tbody>
+    </table>
+    <div class="form-row" style="margin-top:8px">
+      <button class="btn btn-sm btn-ghost" type="button" hx-get="/settings/custom-formats/condition" hx-target="#cf-conditions" hx-swap="beforeend"
+              hx-vals='js:{index: document.querySelectorAll("#cf-conditions tr").length}'>Add condition</button>
+    </div>
+    <p class="setting-help">A release matches when every <em>required</em> condition of each kind passes and, unless they are all required, at least one of that kind does - Radarr's rule. Negate flips a condition. Regular expressions are Go's (RE2): no lookahead or lookbehind.</p>
+  </div>
+  <div class="dialog-foot">
+    {{if not .IsNew}}<button class="btn btn-sm btn-danger" type="button" hx-delete="/settings/custom-formats/{{$f.ID}}" hx-confirm="Delete the custom format {{$f.Name}}? Any scores quality profiles give it go too.">Delete</button>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}

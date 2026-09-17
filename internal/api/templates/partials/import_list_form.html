@@ -1,0 +1,60 @@
+{{define "import_list_form"}}
+{{$l := .List}}
+{{$errors := .Errors}}
+{{$s := $l.Settings}}
+{{$impl := $l.Implementation}}
+<form class="mm-form indexer-form" hx-post="{{if .IsNew}}/settings/import-lists{{else}}/settings/import-lists/{{$l.ID}}{{end}}" hx-target="#import-list-dialog-body" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>{{if .IsNew}}Add{{else}}Edit{{end}} Import List - {{$l.Label}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <input type="hidden" name="implementation" value="{{$impl}}">
+    {{if not .IsNew}}<input type="hidden" name="id" value="{{$l.ID}}">{{end}}
+    {{if .Errors}}<div class="mm-errors">Nothing was saved. Fix the fields marked below and save again.</div>{{end}}
+    <div class="setting-row"><div class="setting-label">Name</div><div class="setting-control"><input type="text" name="name" value="{{$l.Name}}">{{with index $errors "name"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">Enable</div><div class="setting-control"><label class="setting-check"><input type="checkbox" name="enabled"{{if $l.Enabled}} checked{{end}}> Sync this list on the schedule</label></div></div>
+    <div class="setting-row"><div class="setting-label">Library</div><div class="setting-control">
+      <select class="select" name="media_type" hx-get="/settings/import-lists/new?implementation={{$impl}}" hx-include="this" hx-target="#import-list-dialog-body" hx-swap="innerHTML" {{if not .IsNew}}disabled{{end}}>
+        <option value="movie"{{if eq $l.MediaType "movie"}} selected{{end}}>Movies</option><option value="series"{{if eq $l.MediaType "series"}} selected{{end}}>TV</option>
+      </select>
+      {{if not .IsNew}}<input type="hidden" name="media_type" value="{{$l.MediaType}}">{{end}}
+    </div></div>
+    {{if eq $impl "tmdb_list"}}
+    <div class="setting-row"><div class="setting-label">List ID</div><div class="setting-control"><input type="text" name="list_id" value="{{index $s "list_id"}}" placeholder="8"><span class="setting-help">The number in the list's TMDB address, e.g. themoviedb.org/list/<strong>8</strong>. Only the list's {{$l.MediaLabel}} are used.</span>{{with index $errors "list_id"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    {{else if eq $impl "imdb_list"}}
+    <div class="setting-row"><div class="setting-label">List ID</div><div class="setting-control"><input type="text" name="list_id" value="{{index $s "list_id"}}" placeholder="ls012345678"><span class="setting-help">A public IMDb list (ls…) or a public watchlist's user id (ur…). Titles are matched to TMDB.</span>{{with index $errors "list_id"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    {{else if eq $impl "plex_rss"}}
+    <div class="setting-row"><div class="setting-label">RSS URL</div><div class="setting-control"><input type="text" name="url" value="{{index $s "url"}}" placeholder="https://rss.plex.tv/…"><span class="setting-help">Plex Web → Watchlist → RSS feed (the ⋯ menu). Movies or shows depending on Library above.</span>{{with index $errors "url"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    {{else if eq $impl "trakt_list"}}
+    <div class="setting-row"><div class="setting-label">List owner</div><div class="setting-control"><input type="text" name="user" value="{{index $s "user"}}" placeholder="username">{{with index $errors "user"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">List slug</div><div class="setting-control"><input type="text" name="list" value="{{index $s "list"}}" placeholder="my-list"><span class="setting-help">The last part of the list's Trakt address; the list must be public.</span>{{with index $errors "list"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">API client id</div><div class="setting-control"><input type="password" name="client_id" placeholder="{{if index $l.Set "client_id"}}•••••••• (set - leave blank to keep){{else}}From trakt.tv/oauth/applications{{end}}" autocomplete="new-password">{{with index $errors "client_id"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    {{else if eq $impl "tmdb_discover"}}
+    <div class="setting-row"><div class="setting-label">Genre IDs</div><div class="setting-control"><input type="text" name="genres" value="{{index $s "genres"}}" placeholder="28,878"><span class="setting-help">TMDB genre ids, comma-separated (28 Action, 12 Adventure, 16 Animation, 35 Comedy, 80 Crime, 18 Drama, 27 Horror, 878 Sci-Fi, 53 Thriller…).</span></div></div>
+    <div class="setting-row"><div class="setting-label">Minimum rating</div><div class="setting-control"><input type="text" name="min_rating" value="{{index $s "min_rating"}}" placeholder="7"></div></div>
+    <div class="setting-row"><div class="setting-label">Minimum votes</div><div class="setting-control"><input type="text" name="min_votes" value="{{index $s "min_votes"}}" placeholder="500"></div></div>
+    <div class="setting-row"><div class="setting-label">Original language</div><div class="setting-control"><input type="text" name="language" value="{{index $s "language"}}" placeholder="en"></div></div>
+    <div class="setting-row"><div class="setting-label">Years</div><div class="setting-control"><div class="form-row"><input type="text" name="year_from" value="{{index $s "year_from"}}" placeholder="from"><input type="text" name="year_to" value="{{index $s "year_to"}}" placeholder="to"></div></div></div>
+    {{end}}
+    {{if or (eq $impl "tmdb_popular") (eq $impl "tmdb_top_rated") (eq $impl "tmdb_trending") (eq $impl "tmdb_discover")}}
+    <div class="setting-row"><div class="setting-label">Limit</div><div class="setting-control"><input type="number" name="limit" value="{{index $s "limit"}}" min="1" max="500"><span class="setting-help">How many titles from the top of the list.</span></div></div>
+    {{end}}
+    <div class="setting-row"><div class="setting-label">Library folder</div><div class="setting-control"><select class="select" name="root_folder_id"><option value="">Default</option>{{range .RootFolders}}<option value="{{.ID}}"{{if and $l.RootFolderID.Valid (eq $l.RootFolderID.Int64 .ID)}} selected{{end}}>{{.Path}}</option>{{end}}</select></div></div>
+    <div class="setting-row"><div class="setting-label">Quality profile</div><div class="setting-control"><select class="select" name="quality_profile_id"><option value="">Default</option>{{range .QualityProfiles}}<option value="{{.ID}}"{{if and $l.QualityProfileID.Valid (eq $l.QualityProfileID.Int64 .ID)}} selected{{end}}>{{.Name}}</option>{{end}}</select></div></div>
+    <div class="setting-row"><div class="setting-label">Adding</div><div class="setting-control check-row">
+      <label class="setting-check"><input type="checkbox" name="auto_add"{{if $l.AutoAdd}} checked{{end}}> Add titles automatically</label>
+      <label class="setting-check"><input type="checkbox" name="monitored"{{if $l.Monitored}} checked{{end}}> Monitor what's added</label>
+      <label class="setting-check"><input type="checkbox" name="search_on_add"{{if $l.SearchOnAdd}} checked{{end}}> Search when added</label>
+    </div></div>
+    <div id="import-list-test-result"></div>
+  </div>
+  <div class="dialog-foot">
+    {{if not .IsNew}}<button class="btn btn-sm btn-danger" type="button" hx-delete="/settings/import-lists/{{$l.ID}}" hx-confirm="Delete the import list {{$l.Name}}? Titles it already added stay in the library.">Delete</button>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/import-lists/test" hx-include="closest form" hx-target="#import-list-test-result" hx-swap="innerHTML">Test</button>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}

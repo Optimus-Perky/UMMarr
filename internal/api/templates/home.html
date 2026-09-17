@@ -1,0 +1,58 @@
+{{define "content"}}
+<img class="home-banner" src="/static/banner.png" alt="UMMarr - Unified Media Management">
+
+<div class="stats">
+  <a class="stat-link" href="/movies"><div class="stat"><div class="stat-value">{{.Stats.Movies}}</div><div class="stat-label">Movies</div></div></a>
+  <a class="stat-link" href="/tv"><div class="stat"><div class="stat-value">{{.Stats.Series}}</div><div class="stat-label">TV Series</div></div></a>
+  <a class="stat-link" href="/music"><div class="stat"><div class="stat-value">{{.Stats.Artists}}</div><div class="stat-label">Artists</div></div></a>
+  <a class="stat-link" href="/music"><div class="stat"><div class="stat-value">{{.Stats.Albums}}</div><div class="stat-label">Albums</div></div></a>
+</div>
+
+<div class="section-head"><h2>Recently added movies</h2><span class="section-actions"><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"movie"}' hx-target="#scan-result-movie" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button><a class="section-link" href="/movies">View all →</a></span></div>
+<div id="scan-result-movie"></div>
+<div class="grid" style="margin-bottom:34px">
+  {{range .RecentMovies}}
+  <a class="card" href="/movies/{{.Slug}}">
+    {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+    {{else}}<div class="poster"><div class="poster-title">{{.Title}}</div></div>{{end}}
+    <div class="card-body">
+      <div class="card-meta"><span class="card-year">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</span></div>
+    </div>
+  </a>
+  {{else}}
+  <p class="notice">No movies added yet. <a href="/movies">Add one →</a></p>
+  {{end}}
+</div>
+
+<div class="section-head"><h2>Recently added TV series</h2><span class="section-actions"><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"series"}' hx-target="#scan-result-series" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button><a class="section-link" href="/tv">View all →</a></span></div>
+<div id="scan-result-series"></div>
+<div class="grid" style="margin-bottom:34px">
+  {{range .RecentSeries}}
+  <a class="card" href="/tv/{{.Slug}}">
+    {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+    {{else}}<div class="poster"><div class="poster-title">{{.Title}}</div></div>{{end}}
+    <div class="card-body">
+      <div class="card-meta">{{if .Status.Valid}}<span class="card-year">{{.Status.String}}</span>{{end}}</div>
+    </div>
+  </a>
+  {{else}}
+  <p class="notice">No TV series added yet. <a href="/tv">Add one →</a></p>
+  {{end}}
+</div>
+
+<div class="section-head"><h2>Recently added music</h2><span class="section-actions"><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"music"}' hx-target="#scan-result-music" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button><a class="section-link" href="/music">View all →</a></span></div>
+<div id="scan-result-music"></div>
+<div class="grid">
+  {{range .RecentAlbums}}
+  <a class="card" href="/music/albums/{{.ArtistSlug}}/{{.Slug}}">
+    {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+    {{else}}<div class="poster"><div class="poster-title">{{.ArtistName}}<br>{{.Title}}</div></div>{{end}}
+    <div class="card-body">
+      <div class="card-meta"><span class="card-year">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</span></div>
+    </div>
+  </a>
+  {{else}}
+  <p class="notice">No music added yet. <a href="/music">Add some →</a></p>
+  {{end}}
+</div>
+{{end}}

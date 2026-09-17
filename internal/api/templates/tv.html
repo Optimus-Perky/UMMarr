@@ -1,0 +1,232 @@
+{{define "content"}}
+<div class="topbar">
+  <h2 style="flex:1">TV Series</h2>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Add a series</h2></div>
+  {{if not .HasRootFolder}}
+  <p class="notice">No series library folder configured yet. <a href="/settings">Set one up in Settings →</a></p>
+  {{else}}
+  <div class="search">
+    <input type="text" name="q" placeholder="Search TV series by title…"
+      hx-get="/tv/search" hx-trigger="input changed delay:300ms, search" hx-target="#series-results">
+  </div>
+  <div id="series-results"></div>
+  {{end}}
+</div>
+
+{{if .Notice}}<p class="notice" style="color:var(--warn)">{{.Notice}}</p>{{end}}
+<div class="section-head"><h2>Library</h2><span class="section-count">{{len .Series}}</span><span class="section-actions"><button class="btn btn-sm btn-ghost" type="button" onclick="ummarrLibraryOptions('tv')">Options</button><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"series"}' hx-target="#scan-result-series" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button>{{if .HasIndexer}}<span id="search-missing-series"></span><button class="btn btn-sm btn-ghost" hx-post="/tv/search-missing" hx-target="#search-missing-series" hx-swap="outerHTML" hx-confirm="Search for every monitored episode without a file, and grab what UMMarr would accept?">Search all missing</button><span id="search-cutoff-series"></span><button class="btn btn-sm btn-ghost" hx-post="/tv/search-cutoff" hx-target="#search-cutoff-series" hx-swap="outerHTML" hx-confirm="Search for every monitored episode whose file is below its quality profile's cutoff, and grab upgrades UMMarr would accept?">Search cutoff unmet</button>{{end}}</span></div>
+<div id="scan-result-series"></div>
+<div class="library-toolbar" data-library="tv">
+  <input class="library-search" type="search" name="q" placeholder="Search library…" aria-label="Search library">
+  <label class="release-filter-label">Sort
+    <select class="release-filter library-sort" name="sort">
+      <option value="sorttitle">Title</option>
+      <option value="profile">Quality Profile</option>
+      <option value="added">Added</option>
+      <option value="status">Status</option>
+      <option value="path">Path</option>
+      <option value="episodes">Episodes</option>
+      <option value="missing-episodes">Missing Episodes</option>
+      <option value="cutoff-episodes">Cutoff Unmet</option>
+    </select>
+    <button class="btn btn-sm btn-ghost library-dir" type="button" title="Reverse the sort order" aria-label="Sort direction">↑</button>
+  </label>
+  <label class="release-filter-label">Filter
+    <select class="release-filter library-filter" name="filter">
+      <option value="all">All</option>
+      <option value="monitored">Monitored Only</option>
+      <option value="unmonitored">Unmonitored Only</option>
+      <option value="continuing">Continuing Only</option>
+      <option value="ended">Ended Only</option>
+      <option value="missing-episodes">Missing Episodes</option>
+      <option value="cutoff-episodes">Cutoff Unmet</option>
+      <option value="custom">Custom filter…</option>
+    </select>
+  </label>
+  <label class="release-filter-label">View
+    <select class="release-filter library-view" name="view"><option value="posters">Posters</option><option value="overview">Overview</option><option value="table">Table</option></select>
+  </label>
+  <button class="btn btn-sm btn-ghost library-select-toggle" type="button" title="Select several to edit, search or delete them together">Select</button>  <a class="btn btn-sm btn-ghost" href="/tv/seasonpass">Season Pass</a>
+  <span class="library-shown"></span>
+</div>
+<div class="custom-filter-slot library-filter-slot" data-library="tv"></div>
+<div class="letter-bar" data-library="tv"></div>
+<div class="grid poster-grid" data-prefs="ummarr-poster-tv" data-library="tv">
+  <div class="table-head">
+    <span class="card-select"></span>
+    <span class="cell" data-col="monitored">Monitored</span>
+    <span class="cell" data-col="status" data-sort="status">Status</span>
+    <span class="cell" data-col="title" data-sort="sorttitle">Title</span>
+    <span class="cell" data-col="network">Network</span>
+    <span class="cell" data-col="profile" data-sort="profile">Quality Profile</span>
+    <span class="cell" data-col="seasons">Seasons</span>
+    <span class="cell" data-col="episodes" data-sort="episodes">Episodes</span>
+    <span class="cell" data-col="year">Year</span>
+    <span class="cell" data-col="path" data-sort="path">Path</span>
+    <span class="cell" data-col="sizeondisk">Size on Disk</span>
+    <span class="cell" data-col="added" data-sort="added">Added</span>
+    <span class="cell" data-col="missing">Missing</span>
+  </div>
+  {{range .Series}}
+  <div class="card" data-title="{{.Title}}" data-sorttitle="{{.SortTitle}}" data-letter="{{.Letter}}" data-profile="{{.QualityProfileName}}" data-added="{{.AddedUnix}}" data-status="{{.StatusKey}}" data-path="{{.Path.String}}" data-episodes="{{.EpisodeCount}}" data-missing="{{.Missing}}" data-cutoffunmet="{{.CutoffUnmet}}" data-monitored="{{if .Monitored}}1{{else}}0{{end}}">
+    <label class="card-select"><input type="checkbox" class="card-check" value="{{.ID}}" aria-label="Select {{.Title}}"></label>
+    <div class="card-cells">
+      <span class="cell" data-col="monitored">{{if .Monitored}}<span class="chip chip-good">Monitored</span>{{else}}<span class="chip chip-warn">Unmonitored</span>{{end}}</span>
+      <span class="cell" data-col="status">{{or .StatusLabel "-"}}</span>
+      <a class="cell cell-title" data-col="title" href="/tv/{{.Slug}}">{{.Title}}</a>
+      <span class="cell" data-col="network">{{.Network}}</span>
+      <span class="cell" data-col="profile">{{.QualityProfileName}}</span>
+      <span class="cell" data-col="seasons">{{.SeasonCount}}</span>
+      <span class="cell" data-col="episodes"><span class="table-status {{.ProgressClass}}">{{.ProgressText}}</span></span>
+      <span class="cell" data-col="year">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</span>
+      <span class="cell cell-path" data-col="path">{{.Path.String}}</span>
+      <span class="cell" data-col="sizeondisk">{{.SizeHuman}}</span>
+      <span class="cell" data-col="added">{{.AddedText}}</span>
+      <span class="cell" data-col="missing">{{.Missing}}</span>
+    </div>
+    <div class="card-overview">
+      <a class="overview-title" href="/tv/{{.Slug}}">{{.Title}}{{if .Year.Valid}} ({{.Year.Int64}}){{end}}</a>
+      <div class="overview-details">
+        <span data-ov="monitored">{{if .Monitored}}Monitored{{else}}Unmonitored{{end}}</span>
+        <span data-ov="status">{{or .StatusLabel "-"}}</span>
+        <span data-ov="network">{{or .Network "-"}}</span>
+        <span data-ov="profile">{{or .QualityProfileName "-"}}</span>
+        <span data-ov="seasons">{{.SeasonCount}} seasons</span>
+        <span data-ov="added">Added {{.AddedText}}</span>
+        <span data-ov="sizeondisk">{{.SizeHuman}}</span>
+        <span data-ov="path">{{.Path.String}}</span>
+      </div>
+      <p class="overview-text">{{.Overview}}</p>
+    </div>
+    <a class="card-link" href="/tv/{{.Slug}}">
+      {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+      {{else}}<div class="poster"><div class="poster-title">{{.Title}}</div></div>{{end}}
+      <div class="card-progress {{.ProgressClass}}"><div class="card-progress-bar" style="width:{{.Progress}}%"></div><span class="card-progress-text">{{.ProgressText}}</span></div>
+      <div class="card-body">
+        <div class="card-line card-title" data-opt="title">{{.Title}}</div>
+        <div class="card-line" data-opt="monitored">{{if .Monitored}}Monitored{{else}}Unmonitored{{end}}</div>
+        <div class="card-line" data-opt="profile">{{or .QualityProfileName "-"}}</div>
+        <div class="card-line" data-opt="status">{{or .StatusLabel "-"}}</div>
+      </div>
+    </a>
+    {{if $.HasIndexer}}<button class="card-search" data-opt="search" type="button" title="Search for missing episodes" hx-post="/tv/{{.ID}}/search" hx-target="#scan-result-series" hx-swap="innerHTML"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>{{end}}
+  </div>
+  {{else}}
+  <p class="notice">No TV series added yet — search above to add your first one.</p>
+  {{end}}
+</div>
+
+<div class="editor-bar" data-library="tv" hidden>
+  <span class="editor-count">0 selected</span>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="all">Select all shown</button>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="none">Clear</button>
+  <span class="manage-spacer"></span>
+  <button class="btn btn-sm" type="button" data-editor="edit" data-needs-selection>Edit</button>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="monitor" data-needs-selection>Monitoring</button>
+  {{if .HasIndexer}}<button class="btn btn-sm btn-ghost" type="button" data-needs-selection hx-post="/tv/editor/search" hx-include="#tv-selection" hx-target="#scan-result-series" hx-swap="innerHTML">Search</button>{{end}}
+  <button class="btn btn-sm btn-danger" type="button" data-editor="delete" data-needs-selection>Delete</button>
+</div>
+<form id="tv-selection" hidden></form>
+
+<dialog id="tv-editor-edit" class="guide" data-editor-for="tv" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/tv/editor" hx-target="#tv-editor-edit-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Edit Selected Series</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Monitored</div><div class="setting-control"><select name="monitored"><option value="">No Change</option><option value="true">Monitored</option><option value="false">Unmonitored</option></select></div></div>
+      <div class="setting-row"><div class="setting-label">Quality Profile</div><div class="setting-control"><select name="quality_profile_id"><option value="">No Change</option>{{range .QualityProfiles}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div></div>
+      <div class="setting-row"><div class="setting-label">Series Type</div><div class="setting-control"><select name="series_type"><option value="">No Change</option><option value="standard">Standard</option><option value="daily">Daily</option><option value="anime">Anime</option></select></div></div>
+      <div class="setting-row"><div class="setting-label">Season Folder</div><div class="setting-control"><select name="season_folder"><option value="">No Change</option><option value="true">Yes</option><option value="false">No</option></select></div></div>
+      <div class="setting-row"><div class="setting-label">Root Folder</div><div class="setting-control"><select name="root_folder_id"><option value="">No Change</option>{{range .RootFolders}}<option value="{{.ID}}">{{.Path}}</option>{{end}}</select><label class="setting-check"><input type="checkbox" name="move_files" checked> Move each series' folder into the new library folder</label></div></div>
+      <div class="setting-row"><div class="setting-label">Tags</div><div class="setting-control"><input type="text" name="tags" placeholder="comma separated, e.g. 4k, kids"><select name="tag_mode"><option value="add">Add these tags</option><option value="remove">Remove these tags</option><option value="replace">Replace all tags with these</option></select></div></div>
+      <div id="tv-editor-edit-result"></div>
+      <div class="form-row"><button class="btn btn-sm" type="submit">Apply Changes</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="tv-editor-monitor" class="guide" data-editor-for="tv" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/tv/editor/monitor" hx-target="#tv-editor-monitor-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Monitoring</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Monitor</div><div class="setting-control"><select name="monitor">{{range .MonitorOptions}}<option value="{{.Value}}" title="{{.Help}}">{{.Label}}</option>{{end}}</select><span class="setting-help">Sets which episodes of every selected series are monitored, season by season.</span></div></div>
+      <div id="tv-editor-monitor-result"></div>
+      <div class="form-row"><button class="btn btn-sm" type="submit">Save</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="tv-editor-delete" class="guide" data-editor-for="tv" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/tv/editor/delete" hx-target="#tv-editor-delete-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Delete Selected Series</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Add List Exclusion</div><div class="setting-control"><label class="setting-check"><input type="checkbox" name="add_exclusion"> Prevent these series from being added back by import lists</label></div></div>
+      <div class="setting-row"><div class="setting-label">Delete Files</div><div class="setting-control"><label class="setting-check"><input type="checkbox" name="delete_files"> Delete each series' folder and everything in it</label><span class="setting-help">A folder is only removed when it sits inside a library folder. Nothing goes to the recycle bin.</span></div></div>
+      <div id="tv-editor-delete-result"></div>
+      <div class="form-row"><button class="btn btn-sm btn-danger" type="submit">Delete</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="overview-options" class="guide poster-options" data-prefs="ummarr-overview-tv" data-grid='.poster-grid[data-library="tv"]' data-prefix="ov-" data-sizeattr="ovsize" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Overview Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Poster Size</span><select class="select" name="size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <label class="poster-option"><span>Detailed Progress Bar</span><span class="poster-option-check"><input type="checkbox" name="detailed"> Show text on progress bar</span></label>
+      <label class="poster-option"><span>Show Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show monitored status</span></label>
+      <label class="poster-option"><span>Show Status</span><span class="poster-option-check"><input type="checkbox" name="status"> Show series status (continuing / ended)</span></label>
+      <label class="poster-option"><span>Show Network</span><span class="poster-option-check"><input type="checkbox" name="network" checked> Show network</span></label>
+      <label class="poster-option"><span>Show Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show quality profile</span></label>
+      <label class="poster-option"><span>Show Season Count</span><span class="poster-option-check"><input type="checkbox" name="seasons" checked> Show number of seasons</span></label>
+      <label class="poster-option"><span>Show Added</span><span class="poster-option-check"><input type="checkbox" name="added"> Show date added</span></label>
+      <label class="poster-option"><span>Show Size on Disk</span><span class="poster-option-check"><input type="checkbox" name="sizeondisk" checked> Show size on disk</span></label>
+      <label class="poster-option"><span>Show Path</span><span class="poster-option-check"><input type="checkbox" name="path"> Show path</span></label>
+      <label class="poster-option"><span>Show Search</span><span class="poster-option-check"><input type="checkbox" name="search"> Show search button on hover</span></label>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="table-options" class="guide poster-options" data-prefs="ummarr-table-tv" data-grid='.poster-grid[data-library="tv"]' data-prefix="col-" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Table Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <p class="notice">Columns to show. Click a column heading to sort by it.</p>
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show column</span></label>
+      <label class="poster-option"><span>Status</span><span class="poster-option-check"><input type="checkbox" name="status" checked> Show column</span></label>
+      <label class="poster-option"><span>Title</span><span class="poster-option-check"><input type="checkbox" name="title" checked> Show column</span></label>
+      <label class="poster-option"><span>Network</span><span class="poster-option-check"><input type="checkbox" name="network" checked> Show column</span></label>
+      <label class="poster-option"><span>Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show column</span></label>
+      <label class="poster-option"><span>Seasons</span><span class="poster-option-check"><input type="checkbox" name="seasons" checked> Show column</span></label>
+      <label class="poster-option"><span>Episodes</span><span class="poster-option-check"><input type="checkbox" name="episodes" checked> Show column</span></label>
+      <label class="poster-option"><span>Year</span><span class="poster-option-check"><input type="checkbox" name="year"> Show column</span></label>
+      <label class="poster-option"><span>Path</span><span class="poster-option-check"><input type="checkbox" name="path"> Show column</span></label>
+      <label class="poster-option"><span>Size on Disk</span><span class="poster-option-check"><input type="checkbox" name="sizeondisk" checked> Show column</span></label>
+      <label class="poster-option"><span>Added</span><span class="poster-option-check"><input type="checkbox" name="added"> Show column</span></label>
+      <label class="poster-option"><span>Missing Episodes</span><span class="poster-option-check"><input type="checkbox" name="missing"> Show column</span></label>
+    </form>
+  </div>
+</dialog>
+<dialog id="poster-options" class="guide poster-options" data-prefs="ummarr-poster-tv" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Poster Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Poster Size</span><select class="select" name="size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <label class="poster-option"><span>Detailed Progress Bar</span><span class="poster-option-check"><input type="checkbox" name="detailed"> Show text on progress bar</span></label>
+      <label class="poster-option"><span>Show Title</span><span class="poster-option-check"><input type="checkbox" name="title"> Show series title under poster</span></label>
+      <label class="poster-option"><span>Show Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show monitored status under poster</span></label>
+      <label class="poster-option"><span>Show Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show quality profile under poster</span></label>
+      <label class="poster-option"><span>Show Status</span><span class="poster-option-check"><input type="checkbox" name="status"> Show series status (continuing / ended) under poster</span></label>
+      <label class="poster-option"><span>Show Search</span><span class="poster-option-check"><input type="checkbox" name="search"> Show search button on hover</span></label>
+    </form>
+  </div>
+</dialog>
+{{end}}

@@ -1,0 +1,73 @@
+{{define "notification_form"}}
+{{$n := .Notification}}
+{{$errors := .Errors}}
+{{$s := $n.Settings}}
+{{$set := $n.Set}}
+<form class="mm-form indexer-form" hx-post="{{if .IsNew}}/settings/notifications{{else}}/settings/notifications/{{$n.ID}}{{end}}" hx-target="#notification-dialog-body" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>{{if .IsNew}}Add{{else}}Edit{{end}} Connection - {{$n.Label}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    <input type="hidden" name="implementation" value="{{$n.Implementation}}">
+    {{if not .IsNew}}<input type="hidden" name="id" value="{{$n.ID}}">{{end}}
+    {{if .Errors}}<div class="mm-errors">Nothing was saved. Fix the fields marked below and save again.</div>{{end}}
+    <div class="setting-row">
+      <div class="setting-label">Name</div>
+      <div class="setting-control"><input type="text" name="name" value="{{$n.Name}}">{{with index $errors "name"}}<span class="setting-error">{{.}}</span>{{end}}</div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Enable</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="enabled"{{if $n.Enabled}} checked{{end}}> Send notifications</label></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Notify on</div>
+      <div class="setting-control check-row">
+        <label class="setting-check"><input type="checkbox" name="on_grab"{{if $n.OnGrab}} checked{{end}}> Grab</label>
+        <label class="setting-check"><input type="checkbox" name="on_import"{{if $n.OnImport}} checked{{end}}> Import</label>
+        <label class="setting-check"><input type="checkbox" name="on_upgrade"{{if $n.OnUpgrade}} checked{{end}}> Upgrade</label>
+        <label class="setting-check"><input type="checkbox" name="on_rename"{{if $n.OnRename}} checked{{end}}> Rename</label>
+        <label class="setting-check"><input type="checkbox" name="on_delete"{{if $n.OnDelete}} checked{{end}}> Delete</label>
+        <label class="setting-check"><input type="checkbox" name="on_added"{{if $n.OnAdded}} checked{{end}}> Added / match fixed</label>
+        <label class="setting-check"><input type="checkbox" name="on_failed"{{if $n.OnFailed}} checked{{end}}> Download or import failed</label>
+        <label class="setting-check"><input type="checkbox" name="on_health"{{if $n.OnHealth}} checked{{end}}> Health issue</label>
+      </div>
+    </div>
+    {{if eq $n.Implementation "discord"}}
+    <div class="setting-row"><div class="setting-label">Webhook URL</div><div class="setting-control"><input type="password" name="webhook_url" placeholder="{{if index $set "webhook_url"}}•••••••• (set - leave blank to keep){{else}}https://discord.com/api/webhooks/…{{end}}" autocomplete="new-password"><span class="setting-help">Server Settings → Integrations → Webhooks in Discord.</span>{{with index $errors "webhook_url"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">Username</div><div class="setting-control"><input type="text" name="username" value="{{index $s "username"}}" placeholder="UMMarr"><span class="setting-help">Shown as the sender; leave blank for UMMarr.</span></div></div>
+    {{else if eq $n.Implementation "webhook"}}
+    <div class="setting-row"><div class="setting-label">URL</div><div class="setting-control"><input type="text" name="url" value="{{index $s "url"}}" placeholder="https://…">{{with index $errors "url"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">Method</div><div class="setting-control"><select class="select" name="method"><option value="POST"{{if eq (index $s "method") "POST"}} selected{{end}}>POST</option><option value="PUT"{{if eq (index $s "method") "PUT"}} selected{{end}}>PUT</option></select></div></div>
+    <div class="setting-row"><div class="setting-label">Username</div><div class="setting-control"><input type="text" name="username" value="{{index $s "username"}}" autocomplete="off"><span class="setting-help">Optional basic auth.</span></div></div>
+    <div class="setting-row"><div class="setting-label">Password</div><div class="setting-control"><input type="password" name="password" placeholder="{{if index $set "password"}}•••••••• (set - leave blank to keep){{else}}Password{{end}}" autocomplete="new-password"></div></div>
+    {{else if eq $n.Implementation "email"}}
+    <div class="setting-row"><div class="setting-label">SMTP Server</div><div class="setting-control"><input type="text" name="smtp_host" value="{{index $s "smtp_host"}}" placeholder="smtp.example.com">{{with index $errors "smtp_host"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">Port</div><div class="setting-control"><input type="number" name="smtp_port" value="{{index $s "smtp_port"}}"><span class="setting-help">587 uses STARTTLS when offered; 465 is implicit TLS.</span></div></div>
+    <div class="setting-row"><div class="setting-label">Username</div><div class="setting-control"><input type="text" name="username" value="{{index $s "username"}}" autocomplete="off"></div></div>
+    <div class="setting-row"><div class="setting-label">Password</div><div class="setting-control"><input type="password" name="password" placeholder="{{if index $set "password"}}•••••••• (set - leave blank to keep){{else}}Password{{end}}" autocomplete="new-password"></div></div>
+    <div class="setting-row"><div class="setting-label">From</div><div class="setting-control"><input type="text" name="from" value="{{index $s "from"}}" placeholder="ummarr@example.com">{{with index $errors "from"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">To</div><div class="setting-control"><input type="text" name="to" value="{{index $s "to"}}" placeholder="you@example.com, other@example.com">{{with index $errors "to"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    {{else if eq $n.Implementation "plex"}}
+    <p class="notice">Refreshes the matching Plex library after an import, upgrade, rename or delete; the other events don't apply.</p>
+    <div class="setting-row"><div class="setting-label">Server URL</div><div class="setting-control"><input type="text" name="server_url" value="{{index $s "server_url"}}" placeholder="http://media-server:32400">{{with index $errors "server_url"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">Token</div><div class="setting-control"><input type="password" name="token" placeholder="{{if index $set "token"}}•••••••• (set - leave blank to keep){{else}}X-Plex-Token{{end}}" autocomplete="new-password"><span class="setting-help">Your Plex token (support.plex.tv: "Finding an authentication token").</span>{{with index $errors "token"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    {{else if eq $n.Implementation "pushover"}}
+    <div class="setting-row"><div class="setting-label">API Token</div><div class="setting-control"><input type="password" name="api_token" placeholder="{{if index $set "api_token"}}•••••••• (set - leave blank to keep){{else}}Application token{{end}}" autocomplete="new-password">{{with index $errors "api_token"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">User Key</div><div class="setting-control"><input type="password" name="user_key" placeholder="{{if index $set "user_key"}}•••••••• (set - leave blank to keep){{else}}User key{{end}}" autocomplete="new-password">{{with index $errors "user_key"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">Priority</div><div class="setting-control"><select class="select" name="priority">{{$p := index $s "priority"}}<option value="-2"{{if eq $p "-2"}} selected{{end}}>Silent</option><option value="-1"{{if eq $p "-1"}} selected{{end}}>Quiet</option><option value=""{{if eq $p ""}} selected{{end}}>Normal</option><option value="1"{{if eq $p "1"}} selected{{end}}>High</option></select></div></div>
+    {{else if eq $n.Implementation "telegram"}}
+    <div class="setting-row"><div class="setting-label">Bot Token</div><div class="setting-control"><input type="password" name="bot_token" placeholder="{{if index $set "bot_token"}}•••••••• (set - leave blank to keep){{else}}From @BotFather{{end}}" autocomplete="new-password">{{with index $errors "bot_token"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    <div class="setting-row"><div class="setting-label">Chat ID</div><div class="setting-control"><input type="text" name="chat_id" value="{{index $s "chat_id"}}">{{with index $errors "chat_id"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
+    {{end}}
+    <div id="notification-test-result"></div>
+  </div>
+  <div class="dialog-foot">
+    {{if not .IsNew}}<button class="btn btn-sm btn-danger" type="button" hx-delete="/settings/notifications/{{$n.ID}}" hx-confirm="Delete the connection {{$n.Name}}?">Delete</button>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" hx-post="/settings/notifications/test" hx-include="closest form" hx-target="#notification-test-result" hx-swap="innerHTML">Test</button>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}

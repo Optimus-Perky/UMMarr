@@ -1,0 +1,81 @@
+{{define "content"}}
+<div class="topbar">
+  <h2 style="flex:1">Music</h2>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Add an artist</h2></div>
+  {{if not .HasRootFolder}}
+  <p class="notice">No music library folder configured yet. <a href="/settings">Set one up in Settings →</a></p>
+  {{else}}
+  <div class="search">
+    <input type="text" name="q" placeholder="Search artists by name…"
+      hx-get="/music/search" hx-trigger="input changed delay:300ms, search" hx-target="#artist-results">
+  </div>
+  <div id="artist-results"></div>
+  {{end}}
+</div>
+
+<div class="section-head"><h2>Artists</h2><span class="section-count">{{len .Artists}}</span></div>
+<form id="music-editor" class="editor-bar" style="margin-bottom:10px">
+  <span class="notice">Tick artists below, then:</span>
+  <select name="monitored" class="release-filter" aria-label="Monitoring"><option value="">Monitoring: no change</option><option value="yes">Monitored</option><option value="no">Unmonitored</option></select>
+  <label class="setting-check"><input type="checkbox" name="monitor_albums"> and their albums</label>
+  <select name="quality_profile_id" class="release-filter" aria-label="Quality profile"><option value="">Quality profile: no change</option>{{range .QualityProfiles}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+  <button class="btn btn-sm" type="button" hx-post="/music/editor" hx-include="#music-editor" hx-target="#music-editor-result" hx-swap="innerHTML">Apply</button>
+  {{if .HasIndexer}}<button class="btn btn-sm btn-ghost" type="button" hx-post="/music/editor/search" hx-include="#music-editor" hx-target="#music-editor-result" hx-swap="innerHTML">Search</button>{{end}}
+  <button class="btn btn-sm btn-danger" type="button" hx-post="/music/editor/delete" hx-include="#music-editor" hx-target="#music-editor-result" hx-swap="innerHTML" hx-confirm="Remove the ticked artists from the library?">Delete</button>
+  <label class="setting-check"><input type="checkbox" name="delete_files"> with files</label>
+</form>
+<div id="music-editor-result"></div>
+<div class="grid" style="margin-bottom:34px">
+  {{range .Artists}}
+  <div class="card">
+    {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+    {{else}}<div class="poster"><div class="poster-title">{{.Name}}</div></div>{{end}}
+    <div class="card-body">
+      <a class="btn btn-sm btn-ghost btn-block" href="/music/artists/{{.ID}}">Open</a>
+      <label class="setting-check" style="justify-content:center;margin-top:6px"><input type="checkbox" form="music-editor" name="id" value="{{.ID}}"> Select</label>
+    </div>
+  </div>
+  {{else}}
+  <p class="notice">No artists added yet — search above to add your first one.</p>
+  {{end}}
+</div>
+
+<div class="section-head"><h2>Albums</h2><span class="section-count">{{len .Albums}}</span><span class="section-actions"><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"music"}' hx-target="#scan-result-music" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button>{{if .HasIndexer}}<span id="search-missing-music"></span><button class="btn btn-sm btn-ghost" hx-post="/music/search-missing" hx-target="#search-missing-music" hx-swap="outerHTML" hx-confirm="Search for every monitored album without files, and grab what UMMarr would accept?">Search all missing</button>{{end}}</span></div>
+<div id="scan-result-music"></div>
+<div class="grid">
+  {{range .ArtistGroups}}
+    {{if .Albums}}
+    {{$artist := .ArtistName}}
+    {{range .Albums}}
+    <a class="card" href="/music/albums/{{.ArtistSlug}}/{{.Slug}}">
+      {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+      {{else}}<div class="poster"><div class="poster-title">{{$artist}}<br>{{.Title}}</div></div>{{end}}
+      <div class="card-body">
+        <div class="card-meta"><span class="card-year">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</span></div>
+      </div>
+    </a>
+    {{end}}
+    {{end}}
+    {{range .Series}}
+    <div class="tree-card">
+      <div class="tree-head">
+        <h3>{{if .Name}}{{.Name}}{{else}}Various Artists — other compilations{{end}}</h3>
+        <span class="chip chip-info">Compilation</span>
+      </div>
+      <div class="tree">
+        {{range .Albums}}
+        <a class="tree-row l2" href="/music/albums/{{.ArtistSlug}}/{{.Slug}}" style="text-decoration:none;color:inherit">
+          <span class="tree-name">{{.Title}}</span>{{if .Year.Valid}}<span class="card-sub"> · {{.Year.Int64}}</span>{{end}}
+        </a>
+        {{end}}
+      </div>
+    </div>
+    {{end}}
+  {{else}}
+  <p class="notice">No albums added yet — add an artist above, then browse their albums.</p>
+  {{end}}
+</div>
+{{end}}

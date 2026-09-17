@@ -1,0 +1,237 @@
+{{define "content"}}
+<div class="topbar">
+  <h2 style="flex:1">Movies</h2>
+</div>
+
+<div class="panel">
+  <div class="panel-head"><h2>Add a movie</h2></div>
+  {{if not .HasRootFolder}}
+  <p class="notice">No movie library folder configured yet. <a href="/settings">Set one up in Settings →</a></p>
+  {{else}}
+  <div class="search">
+    <input type="text" name="q" placeholder="Search movies by title…"
+      hx-get="/movies/search" hx-trigger="input changed delay:300ms, search" hx-target="#movie-results">
+  </div>
+  <div id="movie-results"></div>
+  {{end}}
+</div>
+
+<div class="section-head"><h2>Library</h2><span class="section-count">{{len .Movies}}</span><span class="section-actions"><button class="btn btn-sm btn-ghost" type="button" onclick="ummarrLibraryOptions('movies')">Options</button><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"movie"}' hx-target="#scan-result-movie" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button>{{if .HasIndexer}}<span id="search-missing-movie"></span><button class="btn btn-sm btn-ghost" hx-post="/movies/search-missing" hx-target="#search-missing-movie" hx-swap="outerHTML" hx-confirm="Search for every monitored movie without a file, and grab what UMMarr would accept?">Search all missing</button><span id="search-cutoff-movie"></span><button class="btn btn-sm btn-ghost" hx-post="/movies/search-cutoff" hx-target="#search-cutoff-movie" hx-swap="outerHTML" hx-confirm="Search for every monitored movie whose file is below its quality profile's cutoff, and grab upgrades UMMarr would accept?">Search cutoff unmet</button>{{end}}</span></div>
+<div id="scan-result-movie"></div>
+{{if .Notice}}<p class="indexer-test ok">{{.Notice}}</p>{{end}}
+<div class="library-toolbar" data-library="movies">
+  <input class="library-search" type="search" name="q" placeholder="Search library…" aria-label="Search library">
+  <label class="release-filter-label">Sort
+    <select class="release-filter library-sort" name="sort">
+      <option value="sorttitle">Title</option>
+      <option value="profile">Quality Profile</option>
+      <option value="added">Added</option>
+      <option value="year">Year</option>
+      <option value="cinema">In Cinemas</option>
+      <option value="digital">Digital Release</option>
+      <option value="physical">Physical Release</option>
+      <option value="path">Path</option>
+      <option value="size">Size on Disk</option>
+      <option value="tmdb">TMDb Rating</option>
+      <option value="imdb">IMDb Rating</option>
+      <option value="tomato">Tomato Rating</option>
+    </select>
+    <button class="btn btn-sm btn-ghost library-dir" type="button" title="Reverse the sort order" aria-label="Sort direction">↑</button>
+  </label>
+  <label class="release-filter-label">Filter
+    <select class="release-filter library-filter" name="filter">
+      <option value="all">All</option>
+      <option value="monitored">Monitored Only</option>
+      <option value="unmonitored">Unmonitored Only</option>
+      <option value="missing">Missing</option>
+      <option value="wanted">Wanted</option>
+      <option value="downloaded">Downloaded</option>
+      <option value="cutoff">Cutoff Unmet</option>
+      <option value="custom">Custom filter…</option>
+    </select>
+  </label>
+  <label class="release-filter-label">View
+    <select class="release-filter library-view" name="view"><option value="posters">Posters</option><option value="overview">Overview</option><option value="table">Table</option></select>
+  </label>
+  <button class="btn btn-sm btn-ghost library-select-toggle" type="button" title="Select several to edit, search or delete them together">Select</button>  <span class="library-shown"></span>
+</div>
+<div class="custom-filter-slot library-filter-slot" data-library="movies"></div>
+<div class="letter-bar" data-library="movies"></div>
+<div class="grid poster-grid" data-prefs="ummarr-poster-movies" data-library="movies">
+  <div class="table-head">
+    <span class="card-select"></span>
+    <span class="cell" data-col="monitored">Monitored</span>
+    <span class="cell" data-col="title" data-sort="sorttitle">Title</span>
+    <span class="cell" data-col="year" data-sort="year">Year</span>
+    <span class="cell" data-col="profile" data-sort="profile">Quality Profile</span>
+    <span class="cell" data-col="availability">Min. Availability</span>
+    <span class="cell" data-col="cinema" data-sort="cinema">In Cinemas</span>
+    <span class="cell" data-col="digital" data-sort="digital">Digital Release</span>
+    <span class="cell" data-col="physical" data-sort="physical">Physical Release</span>
+    <span class="cell" data-col="status">Status</span>
+    <span class="cell" data-col="sizeondisk" data-sort="size">Size on Disk</span>
+    <span class="cell" data-col="path" data-sort="path">Path</span>
+    <span class="cell" data-col="added" data-sort="added">Added</span>
+    <span class="cell" data-col="tmdb" data-sort="tmdb">TMDb</span>
+    <span class="cell" data-col="imdb" data-sort="imdb">IMDb</span>
+    <span class="cell" data-col="tomato" data-sort="tomato">Tomatoes</span>
+  </div>
+  {{range .Movies}}
+  <div class="card" data-title="{{.Title}}" data-sorttitle="{{.SortTitle}}" data-letter="{{.Letter}}" data-profile="{{.QualityProfileName}}" data-added="{{.AddedUnix}}" data-year="{{if .Year.Valid}}{{.Year.Int64}}{{else}}0{{end}}" data-cinema="{{.CinemasUnix}}" data-digital="{{.DigitalUnix}}" data-physical="{{.PhysicalUnix}}" data-path="{{.Path.String}}" data-size="{{.SizeOnDisk}}" data-tmdb="{{.TMDbValue}}" data-imdb="{{.IMDbValue}}" data-tomato="{{.TomatoValue}}" data-monitored="{{if .Monitored}}1{{else}}0{{end}}" data-hasfile="{{if .HasFile}}1{{else}}0{{end}}" data-available="{{if .Available}}1{{else}}0{{end}}" data-cutoffunmet="{{if .CutoffUnmet}}1{{else}}0{{end}}">
+    <label class="card-select"><input type="checkbox" class="card-check" value="{{.ID}}" aria-label="Select {{.Title}}"></label>
+    <div class="card-cells">
+      <span class="cell" data-col="monitored">{{if .Monitored}}<span class="chip chip-good">Monitored</span>{{else}}<span class="chip chip-warn">Unmonitored</span>{{end}}</span>
+      <a class="cell cell-title" data-col="title" href="/movies/{{.Slug}}">{{.Title}}</a>
+      <span class="cell" data-col="year">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</span>
+      <span class="cell" data-col="profile">{{.QualityProfileName}}</span>
+      <span class="cell" data-col="availability">{{.AvailabilityLabel}}</span>
+      <span class="cell" data-col="cinema">{{.InCinemas}}</span>
+      <span class="cell" data-col="digital">{{.DigitalRelease}}</span>
+      <span class="cell" data-col="physical">{{.PhysicalRelease}}</span>
+      <span class="cell" data-col="status"><span class="table-status {{.ProgressClass}}">{{.ProgressText}}</span></span>
+      <span class="cell" data-col="sizeondisk">{{.SizeHuman}}</span>
+      <span class="cell cell-path" data-col="path">{{.Path.String}}</span>
+      <span class="cell" data-col="added">{{.AddedText}}</span>
+      <span class="cell" data-col="tmdb">{{.TMDbRating}}</span>
+      <span class="cell" data-col="imdb">{{.IMDbRating}}</span>
+      <span class="cell" data-col="tomato">{{.TomatoRating}}</span>
+    </div>
+    <div class="card-overview">
+      <a class="overview-title" href="/movies/{{.Slug}}">{{.Title}}{{if .Year.Valid}} ({{.Year.Int64}}){{end}}</a>
+      <div class="overview-details">
+        <span data-ov="monitored">{{if .Monitored}}Monitored{{else}}Unmonitored{{end}}</span>
+        <span data-ov="profile">{{or .QualityProfileName "-"}}</span>
+        <span data-ov="release" title="Release date (minimum availability)">{{.ReleaseDate}}</span>
+        <span data-ov="added">Added {{.AddedText}}</span>
+        <span data-ov="sizeondisk">{{.SizeHuman}}</span>
+        <span data-ov="path">{{.Path.String}}</span>
+      </div>
+      <p class="overview-text">{{.Overview}}</p>
+    </div>
+    <a class="card-link" href="/movies/{{.Slug}}">
+      {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+      {{else}}<div class="poster"><div class="poster-title">{{.Title}}</div></div>{{end}}
+      <div class="card-progress {{.ProgressClass}}"><div class="card-progress-bar" style="width:{{.Progress}}%"></div><span class="card-progress-text">{{.ProgressText}}</span></div>
+      <div class="card-body">
+        <div class="card-line card-title" data-opt="title">{{.Title}}{{if .Year.Valid}} ({{.Year.Int64}}){{end}}</div>
+        <div class="card-line" data-opt="monitored">{{if .Monitored}}Monitored{{else}}Unmonitored{{end}}</div>
+        <div class="card-line" data-opt="profile">{{or .QualityProfileName "-"}}</div>
+        <div class="card-line" data-opt="cinema" title="In cinemas">{{.InCinemas}}</div>
+        <div class="card-line" data-opt="digital" title="Digital release">{{.DigitalRelease}}</div>
+        <div class="card-line" data-opt="physical" title="Physical release">{{.PhysicalRelease}}</div>
+        <div class="card-line" data-opt="release" title="Release date (minimum availability)">{{.ReleaseDate}}</div>
+        <div class="card-line" data-opt="tmdb">TMDb {{.TMDbRating}}</div>
+        <div class="card-line" data-opt="imdb">IMDb {{.IMDbRating}}</div>
+        <div class="card-line" data-opt="tomato">RT {{.TomatoRating}}</div>
+      </div>
+    </a>
+    {{if $.HasIndexer}}<button class="card-search" data-opt="search" type="button" title="Search for this movie" hx-post="/movies/{{.ID}}/search" hx-target="#scan-result-movie" hx-swap="innerHTML"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>{{end}}
+  </div>
+  {{else}}
+  <p class="notice">No movies added yet — search above to add your first one.</p>
+  {{end}}
+</div>
+
+<div class="editor-bar" data-library="movies" hidden>
+  <span class="editor-count">0 selected</span>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="all">Select all shown</button>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="none">Clear</button>
+  <span class="manage-spacer"></span>
+  <button class="btn btn-sm" type="button" data-editor="edit" data-needs-selection>Edit</button>
+  {{if .HasIndexer}}<button class="btn btn-sm btn-ghost" type="button" data-needs-selection hx-post="/movies/editor/search" hx-include="#movies-selection" hx-target="#scan-result-movie" hx-swap="innerHTML">Search</button>{{end}}
+  <button class="btn btn-sm btn-danger" type="button" data-editor="delete" data-needs-selection>Delete</button>
+</div>
+<form id="movies-selection" hidden></form>
+
+<dialog id="movies-editor-edit" class="guide" data-editor-for="movies" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/movies/editor" hx-target="#movies-editor-edit-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Edit Selected Movies</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Monitored</div><div class="setting-control"><select name="monitored"><option value="">No Change</option><option value="true">Monitored</option><option value="false">Unmonitored</option></select></div></div>
+      <div class="setting-row"><div class="setting-label">Minimum Availability</div><div class="setting-control"><select name="minimum_availability"><option value="">No Change</option>{{range .MinimumAvailabilities}}<option value="{{.Value}}">{{.Label}}</option>{{end}}</select></div></div>
+      <div class="setting-row"><div class="setting-label">Quality Profile</div><div class="setting-control"><select name="quality_profile_id"><option value="">No Change</option>{{range .QualityProfiles}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div></div>
+      <div class="setting-row"><div class="setting-label">Root Folder</div><div class="setting-control"><select name="root_folder_id"><option value="">No Change</option>{{range .RootFolders}}<option value="{{.ID}}">{{.Path}}</option>{{end}}</select><label class="setting-check"><input type="checkbox" name="move_files" checked> Move each movie's folder into the new library folder</label></div></div>
+      <div class="setting-row"><div class="setting-label">Tags</div><div class="setting-control"><input type="text" name="tags" placeholder="comma separated, e.g. 4k, kids"><select name="tag_mode"><option value="add">Add these tags</option><option value="remove">Remove these tags</option><option value="replace">Replace all tags with these</option></select></div></div>
+      <div id="movies-editor-edit-result"></div>
+      <div class="form-row"><button class="btn btn-sm" type="submit">Apply Changes</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="movies-editor-delete" class="guide" data-editor-for="movies" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/movies/editor/delete" hx-target="#movies-editor-delete-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Delete Selected Movies</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Add List Exclusion</div><div class="setting-control"><label class="setting-check"><input type="checkbox" name="add_exclusion"> Prevent these movies from being added back by import lists</label></div></div>
+      <div class="setting-row"><div class="setting-label">Delete Files</div><div class="setting-control"><label class="setting-check"><input type="checkbox" name="delete_files"> Delete each movie's folder and everything in it</label><span class="setting-help">A folder is only removed when it sits inside a library folder. Nothing goes to the recycle bin.</span></div></div>
+      <div id="movies-editor-delete-result"></div>
+      <div class="form-row"><button class="btn btn-sm btn-danger" type="submit">Delete</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="overview-options" class="guide poster-options" data-prefs="ummarr-overview-movies" data-grid='.poster-grid[data-library="movies"]' data-prefix="ov-" data-sizeattr="ovsize" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Overview Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Poster Size</span><select class="select" name="size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <label class="poster-option"><span>Detailed Progress Bar</span><span class="poster-option-check"><input type="checkbox" name="detailed"> Show text on progress bar</span></label>
+      <label class="poster-option"><span>Show Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show monitored status</span></label>
+      <label class="poster-option"><span>Show Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show quality profile</span></label>
+      <label class="poster-option"><span>Show Release Date</span><span class="poster-option-check"><input type="checkbox" name="release"> Show release date based on minimum availability</span></label>
+      <label class="poster-option"><span>Show Added</span><span class="poster-option-check"><input type="checkbox" name="added"> Show date added</span></label>
+      <label class="poster-option"><span>Show Size on Disk</span><span class="poster-option-check"><input type="checkbox" name="sizeondisk" checked> Show size on disk</span></label>
+      <label class="poster-option"><span>Show Path</span><span class="poster-option-check"><input type="checkbox" name="path"> Show path</span></label>
+      <label class="poster-option"><span>Show Search</span><span class="poster-option-check"><input type="checkbox" name="search"> Show search button on hover</span></label>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="table-options" class="guide poster-options" data-prefs="ummarr-table-movies" data-grid='.poster-grid[data-library="movies"]' data-prefix="col-" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Table Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <p class="notice">Columns to show. Click a column heading to sort by it.</p>
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show column</span></label>
+      <label class="poster-option"><span>Title</span><span class="poster-option-check"><input type="checkbox" name="title" checked> Show column</span></label>
+      <label class="poster-option"><span>Year</span><span class="poster-option-check"><input type="checkbox" name="year" checked> Show column</span></label>
+      <label class="poster-option"><span>Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show column</span></label>
+      <label class="poster-option"><span>Minimum Availability</span><span class="poster-option-check"><input type="checkbox" name="availability"> Show column</span></label>
+      <label class="poster-option"><span>In Cinemas</span><span class="poster-option-check"><input type="checkbox" name="cinema"> Show column</span></label>
+      <label class="poster-option"><span>Digital Release</span><span class="poster-option-check"><input type="checkbox" name="digital"> Show column</span></label>
+      <label class="poster-option"><span>Physical Release</span><span class="poster-option-check"><input type="checkbox" name="physical"> Show column</span></label>
+      <label class="poster-option"><span>Status</span><span class="poster-option-check"><input type="checkbox" name="status" checked> Show column</span></label>
+      <label class="poster-option"><span>Size on Disk</span><span class="poster-option-check"><input type="checkbox" name="sizeondisk" checked> Show column</span></label>
+      <label class="poster-option"><span>Path</span><span class="poster-option-check"><input type="checkbox" name="path"> Show column</span></label>
+      <label class="poster-option"><span>Added</span><span class="poster-option-check"><input type="checkbox" name="added"> Show column</span></label>
+      <label class="poster-option"><span>TMDb Rating</span><span class="poster-option-check"><input type="checkbox" name="tmdb"> Show column</span></label>
+      <label class="poster-option"><span>IMDb Rating</span><span class="poster-option-check"><input type="checkbox" name="imdb"> Show column</span></label>
+      <label class="poster-option"><span>Tomato Rating</span><span class="poster-option-check"><input type="checkbox" name="tomato"> Show column</span></label>
+    </form>
+  </div>
+</dialog>
+<dialog id="poster-options" class="guide poster-options" data-prefs="ummarr-poster-movies" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Poster Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Poster Size</span><select class="select" name="size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <label class="poster-option"><span>Detailed Progress Bar</span><span class="poster-option-check"><input type="checkbox" name="detailed"> Show text on progress bar</span></label>
+      <label class="poster-option"><span>Show Title</span><span class="poster-option-check"><input type="checkbox" name="title"> Show movie title under poster</span></label>
+      <label class="poster-option"><span>Show Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show monitored status under poster</span></label>
+      <label class="poster-option"><span>Show Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show quality profile under poster</span></label>
+      <label class="poster-option"><span>Show Cinema Release Date</span><span class="poster-option-check"><input type="checkbox" name="cinema"> Show cinema release date under poster</span></label>
+      <label class="poster-option"><span>Show Digital Release Date</span><span class="poster-option-check"><input type="checkbox" name="digital"> Show digital release date under poster</span></label>
+      <label class="poster-option"><span>Show Physical Release Date</span><span class="poster-option-check"><input type="checkbox" name="physical"> Show physical release date under poster</span></label>
+      <label class="poster-option"><span>Show Release Date</span><span class="poster-option-check"><input type="checkbox" name="release"> Show release date based on minimum availability under poster</span></label>
+      <label class="poster-option"><span>Show TMDb Rating</span><span class="poster-option-check"><input type="checkbox" name="tmdb"> Show TMDb rating under poster</span></label>
+      <label class="poster-option"><span>Show IMDb Rating</span><span class="poster-option-check"><input type="checkbox" name="imdb"> Show IMDb rating under poster</span></label>
+      <label class="poster-option"><span>Show Tomato Rating</span><span class="poster-option-check"><input type="checkbox" name="tomato"> Show Tomato rating under poster</span></label>
+      <label class="poster-option"><span>Show Search</span><span class="poster-option-check"><input type="checkbox" name="search"> Show search button on hover</span></label>
+    </form>
+  </div>
+</dialog>
+{{end}}

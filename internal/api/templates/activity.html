@@ -1,0 +1,155 @@
+{{define "content"}}
+<div class="topbar">
+  <h2 style="flex:1">Activity</h2>
+</div>
+<div class="dialog-tabs" role="tablist" style="margin-bottom:14px">
+  {{$tab := .Tab}}{{range .Tabs}}<a class="dialog-tab{{if eq .Key $tab}} active{{end}}" href="/activity{{if ne .Key "queue"}}/{{.Key}}{{end}}">{{.Label}}</a>{{end}}
+</div>
+
+{{if eq .Tab "queue"}}
+<div class="panel">
+  <div class="panel-head"><h2>Queue</h2></div>
+  <div id="queue-results" hx-get="/activity/queue" hx-trigger="load, every 3s, grab-removed from:body" hx-swap="innerHTML"></div>
+</div>
+
+<dialog id="grab-remove-dialog" class="guide" onclick="if (event.target === this) this.close()">
+  <div class="guide-head">
+    <h2>Remove</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <form class="guide-body mm-form" id="grab-remove-form" hx-target="#grab-remove-result" hx-swap="innerHTML"
+        hx-on::after-request="if (event.detail.successful && !event.detail.xhr.responseText) this.closest('dialog').close()">
+    <p>Remove <strong id="grab-remove-title"></strong>?</p>
+    <div class="setting-row">
+      <div class="setting-label">Remove From Download Client</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="remove_from_client" id="grab-remove-client"> Remove the download and its files from the download client</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Blocklist Release</div>
+      <div class="setting-control">
+        <select name="blocklist">
+          <option value="none">Do not Blocklist</option>
+          <option value="search">Blocklist and Search</option>
+          <option value="only">Blocklist Only</option>
+        </select>
+        <span class="setting-help">Blocklisting stops UMMarr grabbing this release again. Blocklist and Search then looks for a different release straight away.</span>
+      </div>
+    </div>
+    <div id="grab-remove-result"></div>
+    <div class="form-row"><button class="btn btn-sm" type="submit">Remove</button></div>
+  </form>
+</dialog>
+<script>
+function ummarrRemoveGrab(id, title, imported) {
+  const form = document.getElementById('grab-remove-form');
+  form.setAttribute('hx-post', '/activity/grabs/' + id + '/remove');
+  htmx.process(form);
+  form.reset();
+  document.getElementById('grab-remove-title').textContent = title;
+  // A finished import is a copy, so the download's still seeding - leave it
+  // unless asked.
+  document.getElementById('grab-remove-client').checked = !imported;
+  document.getElementById('grab-remove-result').innerHTML = '';
+  document.getElementById('grab-remove-dialog').showModal();
+}
+</script>
+{{end}}
+
+{{if eq .Tab "blocklist"}}
+<div class="section-head"><h2>Blocklist</h2><span class="section-count">{{.Total}}</span>
+  {{if .Blocklist}}<span class="section-actions"><button class="btn btn-sm btn-ghost" hx-post="/activity/blocklist/clear" hx-swap="none" hx-confirm="Remove every release from the blocklist? They can then be grabbed again.">Clear</button></span>{{end}}
+</div>
+<div class="panel">
+  {{if .Blocklist}}
+  <table class="data-table">
+    <thead><tr><th>Item</th><th>Source Title</th><th>Quality</th><th>Indexer</th><th>Date</th><th>Message</th><th></th></tr></thead>
+    <tbody>
+      {{range .Blocklist}}
+      <tr>
+        <td>{{.Item}}</td>
+        <td class="wrap">{{.SourceTitle}}</td>
+        <td>{{if .Quality}}<span class="quality-pill">{{.Quality}}</span>{{end}}</td>
+        <td>{{.Indexer}}</td>
+        <td class="nowrap">{{.When}}</td>
+        <td class="wrap">{{.Message}}</td>
+        <td><button class="btn btn-sm btn-ghost" hx-delete="/activity/blocklist/{{.ID}}" hx-swap="none" title="Remove from blocklist">Remove</button></td>
+      </tr>
+      {{end}}
+    </tbody>
+  </table>
+  {{if gt .Pages 1}}
+  <div class="form-row" style="margin-top:12px">
+    {{if gt .Page 1}}<a class="btn btn-sm btn-ghost" href="/activity/blocklist?page={{.PrevPage}}">← Newer</a>{{end}}
+    <span class="notice">Page {{.Page}} of {{.Pages}}</span>
+    {{if lt .Page .Pages}}<a class="btn btn-sm btn-ghost" href="/activity/blocklist?page={{.NextPage}}">Older →</a>{{end}}
+  </div>
+  {{end}}
+  {{else}}
+  <p class="notice">Nothing is blocklisted. A release whose download fails, or that you mark as failed from the queue, is listed here and won't be grabbed again for the same item.</p>
+  {{end}}
+</div>
+{{end}}
+
+{{if eq .Tab "manual-import"}}{{with .ManualImport}}
+<div class="panel">
+  <div class="panel-head"><h2>Manual Import{{if .GrabTitle}} - {{.GrabTitle}}{{end}}</h2></div>
+  {{if not .GrabID}}
+  <form class="form-row" method="get" action="/activity/manual-import">
+    <input class="library-search" type="text" name="path" value="{{.Folder}}" placeholder="Folder to import from, e.g. /data/downloads/Some.Release" style="flex:1" aria-label="Folder">
+    <button class="btn btn-sm" type="submit">Scan</button>
+  </form>
+  {{end}}
+  {{if .Error}}<p class="indexer-test failed">{{.Error}}</p>{{end}}
+
+  {{if .Results}}
+  <table class="data-table">
+    <thead><tr><th>File</th><th>Result</th></tr></thead>
+    <tbody>{{range .Results}}<tr><td class="wrap">{{.Path}}</td><td class="wrap">{{if .OK}}<span class="chip chip-good">Imported</span>{{else}}<span class="chip chip-warn">Not imported</span>{{end}} {{.Message}}</td></tr>{{end}}</tbody>
+  </table>
+  <div class="form-row" style="margin-top:12px"><a class="btn btn-sm btn-ghost" href="/activity">Back to the queue</a>{{if .Folder}}<a class="btn btn-sm btn-ghost" href="/activity/manual-import?path={{.Folder}}">Scan the folder again</a>{{end}}</div>
+  {{else if .Folder}}{{if .Rows}}
+  <form method="post" action="/activity/manual-import">
+    <input type="hidden" name="path" value="{{.Folder}}">
+    {{if .GrabID}}<input type="hidden" name="grab" value="{{.GrabID}}">{{end}}
+    <p class="notice">{{.Folder}}</p>
+    <datalist id="manual-import-items">{{range .Choices}}<option value="{{.Token}}"></option>{{end}}</datalist>
+    <table class="data-table manual-import">
+      <thead><tr><th><input type="checkbox" aria-label="Select all" onclick="this.closest('table').querySelectorAll('input[name=selected]').forEach(function (c) { c.checked = this.checked }, this)"></th>
+        <th>Relative Path</th><th>Movie, Series or Album</th><th>Season</th><th>Episodes / Track</th><th>Quality</th><th>Size</th><th>Rejections</th></tr></thead>
+      <tbody>
+      {{$qualities := .Qualities}}
+      {{range .Rows}}
+      <tr>
+        <td><input type="checkbox" name="selected" value="{{.Index}}"{{if .Item}} checked{{end}} aria-label="Import {{.Path}}"><input type="hidden" name="path_{{.Index}}" value="{{.Path}}"></td>
+        <td class="wrap">{{.Path}}</td>
+        <td><input type="text" name="item_{{.Index}}" value="{{.Item}}" list="manual-import-items" placeholder="Start typing a title…" style="min-width:260px"
+                   hx-get="/activity/manual-import/tracks?index={{.Index}}" hx-trigger="change" hx-target="#tracks-{{.Index}}" hx-swap="innerHTML"></td>
+        <td><input type="number" min="0" name="season_{{.Index}}" value="{{.Season}}" style="width:64px" aria-label="Season"></td>
+        <td><input type="text" name="episodes_{{.Index}}" value="{{.Episodes}}" placeholder="e.g. 1 or 1,2" style="width:90px" aria-label="Episodes"><span id="tracks-{{.Index}}">{{template "manual_import_tracks" .}}</span></td>
+        <td><select name="quality_{{.Index}}" aria-label="Quality">{{$q := .Quality}}{{range $qualities}}<option value="{{.}}"{{if eq . $q}} selected{{end}}>{{.}}</option>{{end}}</select></td>
+        <td class="nowrap">{{.Size}}</td>
+        <td class="wrap">{{range .Rejections}}<div class="card-sub">{{.}}</div>{{end}}</td>
+      </tr>
+      {{end}}
+      </tbody>
+    </table>
+    <div class="form-row" style="margin-top:12px">
+      <label class="release-filter-label">Import mode
+        <select name="mode" class="release-filter">
+          <option value="copy">{{if .GrabID}}Copy (keep seeding){{else}}Copy{{end}}</option>
+          <option value="move">Move</option>
+        </select>
+      </label>
+      <button class="btn btn-sm" type="submit">Import</button>
+    </div>
+    <p class="notice">Episodes are only used for a series and the track only for an album. Copy follows Use Hardlinks in Media Management; Move deletes each original once it has imported.</p>
+  </form>
+  {{else}}<p class="notice">No video or audio files in {{.Folder}}.</p>{{end}}
+  {{else}}
+  <p class="notice">Point this at a folder of downloads UMMarr didn't import - or use Manual Import on a queue item - to choose what each file is and import it.</p>
+  {{end}}
+</div>
+{{end}}{{end}}
+{{end}}

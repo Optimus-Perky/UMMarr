@@ -1,0 +1,49 @@
+{{define "metadata_provider_form"}}
+{{$p := .Provider}}{{$impl := .Implementation}}
+<form hx-post="/settings/metadata-sources" hx-target="#metadata-provider-dialog-body" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>{{if .IsNew}}Add{{else}}Edit{{end}} Metadata Source - {{$impl.Name}} ({{.MediaLabel}})</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body mm-form">
+    <input type="hidden" name="media_type" value="{{$p.MediaType}}">
+    <input type="hidden" name="implementation" value="{{$p.Implementation}}">
+    {{if not .IsNew}}<input type="hidden" name="id" value="{{$p.ID}}">{{end}}
+    {{if .Error}}<p class="indexer-test failed">{{.Error}}</p>{{end}}
+    <p class="notice">{{$impl.Supplies}}</p>
+    <div class="setting-row">
+      <div class="setting-label">Name</div>
+      <div class="setting-control"><input type="text" name="name" value="{{$p.Name}}" placeholder="{{$impl.Name}}">
+        <span class="setting-help">What this source is called in the list - handy when the same provider appears twice.</span></div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Enable</div>
+      <div class="setting-control"><label class="setting-check"><input type="checkbox" name="enabled"{{if $p.Enabled}} checked{{end}}> Ask this provider</label></div>
+    </div>
+    {{if $impl.NeedsKey}}
+    <div class="setting-row">
+      <div class="setting-label">API Key</div>
+      <div class="setting-control">
+        <input type="password" name="api_key" placeholder="{{if .KeySet}}•••••••• (set - leave blank to keep){{else}}API key{{end}}" autocomplete="new-password">
+        <span class="setting-help">{{$impl.Help}}</span>
+      </div>
+    </div>
+    {{end}}
+    {{range $impl.Fields}}
+    <div class="setting-row">
+      <div class="setting-label">{{.Label}}</div>
+      <div class="setting-control">
+        <input type="text" name="extra_{{.Key}}" value="{{index $p.Extra .Key}}">
+        <span class="setting-help">{{.Help}}</span>
+      </div>
+    </div>
+    {{end}}
+  </div>
+  <div class="dialog-foot">
+    {{if not .IsNew}}<button class="btn btn-sm btn-danger" type="button" hx-delete="/settings/metadata-sources/{{$p.ID}}" hx-confirm="Remove {{$p.Name}} from {{.MediaLabel}}'s metadata sources?">Delete</button>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}
