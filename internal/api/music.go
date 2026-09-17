@@ -6,6 +6,7 @@ import (
 	"sort"
 	"strconv"
 
+	"github.com/Optimus-Perky/UMMarr/internal/decision"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -64,21 +65,23 @@ func groupAlbums(albums []store.AlbumSummary) []artistAlbums {
 }
 
 type musicPageData struct {
-	Active          string
-	PageTitle       string
-	Artists         []store.ArtistSummary
-	Albums          []store.AlbumSummary
-	ArtistGroups    []artistAlbums
-	RootFolders     []store.RootFolder
-	QualityProfiles []store.QualityProfile
-	HasRootFolder   bool
-	HasIndexer      bool
+	Active              string
+	PageTitle           string
+	Notice              string
+	Artists             []artistCard
+	Albums              []store.AlbumSummary
+	ArtistGroups        []artistAlbums
+	RootFolders         []store.RootFolder
+	QualityProfiles     []store.QualityProfile
+	AlbumMonitorOptions []store.MonitorOption
+	HasRootFolder       bool
+	HasIndexer          bool
 }
 
 func (h *handler) Music(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	artists, err := store.ListArtists(ctx, h.deps.DB)
+	artists, err := store.ListArtistLibrary(ctx, h.deps.DB)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -99,18 +102,32 @@ func (h *handler) Music(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	profiles, err := decision.LoadProfiles(ctx, h.deps.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	qualities, err := store.TrackFileQualitiesByArtist(ctx, h.deps.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	groups := groupAlbums(albums)
-	sortMusic(artists, groups)
+	cards := artistCards(artists, profiles, qualities)
+	sortMusic(cards, groups)
 	h.renderPage(w, "music", musicPageData{
-		Active:          "music",
-		PageTitle:       "Music",
-		Artists:         artists,
-		Albums:          albums,
-		ArtistGroups:    groups,
-		RootFolders:     rootFolders,
-		QualityProfiles: qualityProfiles,
-		HasRootFolder:   len(rootFolders) > 0,
-		HasIndexer:      h.deps.Indexer.Configured(ctx),
+		Active:              "music",
+		PageTitle:           "Music",
+		Notice:              libraryNotice(r, "music", ""),
+		Artists:             cards,
+		Albums:              albums,
+		ArtistGroups:        groups,
+		RootFolders:         rootFolders,
+		QualityProfiles:     qualityProfiles,
+		AlbumMonitorOptions: store.AlbumMonitorOptions,
+		HasRootFolder:       len(rootFolders) > 0,
+		HasIndexer:          h.deps.Indexer.Configured(ctx),
 	})
 }
 
@@ -381,7 +398,7 @@ func byTitle(a, b string) bool {
 	return x < y
 }
 
-func sortMusic(artists []store.ArtistSummary, groups []artistAlbums) {
+func sortMusic(artists []artistCard, groups []artistAlbums) {
 	sort.SliceStable(artists, func(i, j int) bool { return byTitle(artists[i].Name, artists[j].Name) })
 	sort.SliceStable(groups, func(i, j int) bool { return byTitle(groups[i].ArtistName, groups[j].ArtistName) })
 	for _, g := range groups {

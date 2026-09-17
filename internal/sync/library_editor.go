@@ -35,9 +35,13 @@ func moveFolder(oldPath, newPath string, moveFiles bool) error {
 // moveFiles its folder moves too; otherwise only where UMMarr looks changes.
 func (s *ImportService) ChangeRootFolder(ctx context.Context, kind string, id, rootFolderID int64, moveFiles bool) error {
 	mediaType, table := "movie", "movies"
-	if kind == "series" {
+	switch kind {
+	case "movie":
+	case "series":
 		mediaType, table = "series", "series"
-	} else if kind != "movie" {
+	case "artist":
+		mediaType, table = "music", "artists"
+	default:
 		return fmt.Errorf("unknown library kind %q", kind)
 	}
 	roots, err := store.ListRootFolders(ctx, s.DB, mediaType)
@@ -55,7 +59,13 @@ func (s *ImportService) ChangeRootFolder(ctx context.Context, kind string, id, r
 	}
 	var title, current string
 	var currentRoot int64
-	if kind == "movie" {
+	if kind == "artist" {
+		d, found, err := store.GetArtistDetail(ctx, s.DB, id)
+		if err != nil || !found {
+			return fmt.Errorf("artist %d not found: %v", id, err)
+		}
+		title, current, currentRoot = d.Name, d.Path.String, d.RootFolderID
+	} else if kind == "movie" {
 		d, found, err := store.GetMovieDetail(ctx, s.DB, id)
 		if err != nil || !found {
 			return fmt.Errorf("movie %d not found: %v", id, err)
@@ -83,9 +93,12 @@ func (s *ImportService) ChangeRootFolder(ctx context.Context, kind string, id, r
 		return err
 	}
 	var e store.Event
-	if kind == "movie" {
+	switch kind {
+	case "movie":
 		e = movieEvent(ctx, s.DB, id, store.EventRenamed)
-	} else {
+	case "artist":
+		e = store.Event{Event: store.EventRenamed, Title: title}
+	default:
 		e = seriesEvent(ctx, s.DB, id, store.EventRenamed)
 	}
 	e.Source = "mass editor"

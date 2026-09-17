@@ -16,35 +16,210 @@
   {{end}}
 </div>
 
-<div class="section-head"><h2>Artists</h2><span class="section-count">{{len .Artists}}</span></div>
-<form id="music-editor" class="editor-bar" style="margin-bottom:10px">
-  <span class="notice">Tick artists below, then:</span>
-  <select name="monitored" class="release-filter" aria-label="Monitoring"><option value="">Monitoring: no change</option><option value="yes">Monitored</option><option value="no">Unmonitored</option></select>
-  <label class="setting-check"><input type="checkbox" name="monitor_albums"> and their albums</label>
-  <select name="quality_profile_id" class="release-filter" aria-label="Quality profile"><option value="">Quality profile: no change</option>{{range .QualityProfiles}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
-  <button class="btn btn-sm" type="button" hx-post="/music/editor" hx-include="#music-editor" hx-target="#music-editor-result" hx-swap="innerHTML">Apply</button>
-  {{if .HasIndexer}}<button class="btn btn-sm btn-ghost" type="button" hx-post="/music/editor/search" hx-include="#music-editor" hx-target="#music-editor-result" hx-swap="innerHTML">Search</button>{{end}}
-  <button class="btn btn-sm btn-danger" type="button" hx-post="/music/editor/delete" hx-include="#music-editor" hx-target="#music-editor-result" hx-swap="innerHTML" hx-confirm="Remove the ticked artists from the library?">Delete</button>
-  <label class="setting-check"><input type="checkbox" name="delete_files"> with files</label>
-</form>
-<div id="music-editor-result"></div>
-<div class="grid" style="margin-bottom:34px">
+{{if .Notice}}<p class="notice" style="color:var(--warn)">{{.Notice}}</p>{{end}}
+<div class="section-head"><h2>Artists</h2><span class="section-count">{{len .Artists}}</span><span class="section-actions"><button class="btn btn-sm btn-ghost" type="button" onclick="ummarrLibraryOptions('music')">Options</button><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"music"}' hx-target="#scan-result-music" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button>{{if .HasIndexer}}<span id="search-missing-music"></span><button class="btn btn-sm btn-ghost" hx-post="/music/search-missing" hx-target="#search-missing-music" hx-swap="outerHTML" hx-confirm="Search for every monitored album without files, and grab what UMMarr would accept?">Search all missing</button><span id="search-cutoff-music"></span><button class="btn btn-sm btn-ghost" hx-post="/music/search-cutoff" hx-target="#search-cutoff-music" hx-swap="outerHTML" hx-confirm="Search for every monitored album whose files are below its quality profile's cutoff, and grab upgrades UMMarr would accept?">Search cutoff unmet</button>{{end}}</span></div>
+<div id="scan-result-music"></div>
+<div class="library-toolbar" data-library="music">
+  <input class="library-search" type="search" name="q" placeholder="Search library…" aria-label="Search library">
+  <label class="release-filter-label">Sort
+    <select class="release-filter library-sort" name="sort">
+      <option value="sorttitle">Name</option>
+      <option value="profile">Quality Profile</option>
+      <option value="added">Added</option>
+      <option value="status">Status</option>
+      <option value="path">Path</option>
+      <option value="albums">Albums</option>
+      <option value="missing">Missing Albums</option>
+      <option value="cutoffunmet">Cutoff Unmet</option>
+    </select>
+    <button class="btn btn-sm btn-ghost library-dir" type="button" title="Reverse the sort order" aria-label="Sort direction">↑</button>
+  </label>
+  <label class="release-filter-label">Filter
+    <select class="release-filter library-filter" name="filter">
+      <option value="all">All</option>
+      <option value="monitored">Monitored Only</option>
+      <option value="unmonitored">Unmonitored Only</option>
+      <option value="active">Active Only</option>
+      <option value="ended">Ended Only</option>
+      <option value="missing-albums">Missing Albums</option>
+      <option value="cutoff-albums">Cutoff Unmet</option>
+      <option value="custom">Custom filter…</option>
+    </select>
+  </label>
+  <label class="release-filter-label">View
+    <select class="release-filter library-view" name="view"><option value="posters">Posters</option><option value="overview">Overview</option><option value="table">Table</option></select>
+  </label>
+  <button class="btn btn-sm btn-ghost library-select-toggle" type="button" title="Select several to edit, search or delete them together">Select</button>
+  <span class="library-shown"></span>
+</div>
+<div class="custom-filter-slot library-filter-slot" data-library="music"></div>
+<div class="letter-bar" data-library="music"></div>
+<div class="grid poster-grid" data-prefs="ummarr-poster-music" data-library="music">
+  <div class="table-head">
+    <span class="card-select"></span>
+    <span class="cell" data-col="monitored">Monitored</span>
+    <span class="cell" data-col="status" data-sort="status">Status</span>
+    <span class="cell" data-col="title" data-sort="sorttitle">Artist</span>
+    <span class="cell" data-col="profile" data-sort="profile">Quality Profile</span>
+    <span class="cell" data-col="albums" data-sort="albums">Albums</span>
+    <span class="cell" data-col="tracks">Tracks</span>
+    <span class="cell" data-col="path" data-sort="path">Path</span>
+    <span class="cell" data-col="sizeondisk">Size on Disk</span>
+    <span class="cell" data-col="added" data-sort="added">Added</span>
+    <span class="cell" data-col="missing">Missing</span>
+  </div>
   {{range .Artists}}
-  <div class="card">
-    {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
-    {{else}}<div class="poster"><div class="poster-title">{{.Name}}</div></div>{{end}}
-    <div class="card-body">
-      <a class="btn btn-sm btn-ghost btn-block" href="/music/artists/{{.ID}}">Open</a>
-      <label class="setting-check" style="justify-content:center;margin-top:6px"><input type="checkbox" form="music-editor" name="id" value="{{.ID}}"> Select</label>
+  <div class="card" data-title="{{.Name}}" data-sorttitle="{{.SortTitle}}" data-letter="{{.Letter}}" data-profile="{{.QualityProfileName}}" data-added="{{.AddedUnix}}" data-status="{{.StatusKey}}" data-path="{{.Path.String}}" data-albums="{{.AlbumCount}}" data-missing="{{.MissingAlbums}}" data-cutoffunmet="{{.CutoffUnmet}}" data-monitored="{{if .Monitored}}1{{else}}0{{end}}">
+    <label class="card-select"><input type="checkbox" class="card-check" value="{{.ID}}" aria-label="Select {{.Name}}"></label>
+    <div class="card-cells">
+      <span class="cell" data-col="monitored">{{if .Monitored}}<span class="chip chip-good">Monitored</span>{{else}}<span class="chip chip-warn">Unmonitored</span>{{end}}</span>
+      <span class="cell" data-col="status">{{or .StatusLabel "-"}}</span>
+      <a class="cell cell-title" data-col="title" href="/music/artists/{{.ID}}">{{.Name}}</a>
+      <span class="cell" data-col="profile">{{.QualityProfileName}}</span>
+      <span class="cell" data-col="albums"><span class="table-status {{.ProgressClass}}">{{.ProgressText}}</span></span>
+      <span class="cell" data-col="tracks">{{.TracksWithF}} / {{.TrackCount}}</span>
+      <span class="cell cell-path" data-col="path">{{.Path.String}}</span>
+      <span class="cell" data-col="sizeondisk">{{.SizeHuman}}</span>
+      <span class="cell" data-col="added">{{.AddedText}}</span>
+      <span class="cell" data-col="missing">{{.MissingAlbums}}</span>
     </div>
+    <div class="card-overview">
+      <a class="overview-title" href="/music/artists/{{.ID}}">{{.Name}}</a>
+      <div class="overview-details">
+        <span data-ov="monitored">{{if .Monitored}}Monitored{{else}}Unmonitored{{end}}</span>
+        <span data-ov="status">{{or .StatusLabel "-"}}</span>
+        <span data-ov="profile">{{or .QualityProfileName "-"}}</span>
+        <span data-ov="albums">{{.AlbumCount}} albums</span>
+        <span data-ov="tracks">{{.TrackCount}} tracks</span>
+        <span data-ov="added">Added {{.AddedText}}</span>
+        <span data-ov="sizeondisk">{{.SizeHuman}}</span>
+        <span data-ov="path">{{.Path.String}}</span>
+      </div>
+    </div>
+    <a class="card-link" href="/music/artists/{{.ID}}">
+      {{if .PosterURL}}<div class="poster" style="background-image:url('{{.PosterURL}}')"></div>
+      {{else}}<div class="poster"><div class="poster-title">{{.Name}}</div></div>{{end}}
+      <div class="card-progress {{.ProgressClass}}"><div class="card-progress-bar" style="width:{{.Progress}}%"></div><span class="card-progress-text">{{.ProgressText}}</span></div>
+      <div class="card-body">
+        <div class="card-line card-title" data-opt="title">{{.Name}}</div>
+        <div class="card-line" data-opt="monitored">{{if .Monitored}}Monitored{{else}}Unmonitored{{end}}</div>
+        <div class="card-line" data-opt="profile">{{or .QualityProfileName "-"}}</div>
+        <div class="card-line" data-opt="status">{{or .StatusLabel "-"}}</div>
+      </div>
+    </a>
+    {{if $.HasIndexer}}<button class="card-search" data-opt="search" type="button" title="Search for missing albums" hx-post="/music/artists/{{.ID}}/search" hx-target="#scan-result-music" hx-swap="innerHTML"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>{{end}}
   </div>
   {{else}}
   <p class="notice">No artists added yet — search above to add your first one.</p>
   {{end}}
 </div>
 
-<div class="section-head"><h2>Albums</h2><span class="section-count">{{len .Albums}}</span><span class="section-actions"><button class="btn btn-sm btn-ghost" hx-post="/settings/scan-library" hx-vals='{"media_type":"music"}' hx-target="#scan-result-music" hx-swap="innerHTML" hx-disabled-elt="this">Scan folder</button>{{if .HasIndexer}}<span id="search-missing-music"></span><button class="btn btn-sm btn-ghost" hx-post="/music/search-missing" hx-target="#search-missing-music" hx-swap="outerHTML" hx-confirm="Search for every monitored album without files, and grab what UMMarr would accept?">Search all missing</button>{{end}}</span></div>
-<div id="scan-result-music"></div>
+<div class="editor-bar" data-library="music" hidden>
+  <span class="editor-count">0 selected</span>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="all">Select all shown</button>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="none">Clear</button>
+  <span class="manage-spacer"></span>
+  <button class="btn btn-sm" type="button" data-editor="edit" data-needs-selection>Edit</button>
+  <button class="btn btn-sm btn-ghost" type="button" data-editor="monitor" data-needs-selection>Monitoring</button>
+  {{if .HasIndexer}}<button class="btn btn-sm btn-ghost" type="button" data-needs-selection hx-post="/music/editor/search" hx-include="#music-selection" hx-target="#scan-result-music" hx-swap="innerHTML">Search</button>{{end}}
+  <button class="btn btn-sm btn-danger" type="button" data-editor="delete" data-needs-selection>Delete</button>
+</div>
+<form id="music-selection" hidden></form>
+
+<dialog id="music-editor-edit" class="guide" data-editor-for="music" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/music/editor" hx-target="#music-editor-edit-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Edit Selected Artists</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Monitored</div><div class="setting-control"><select name="monitored"><option value="">No Change</option><option value="yes">Monitored</option><option value="no">Unmonitored</option></select><label class="setting-check"><input type="checkbox" name="monitor_albums"> Apply to their albums too</label></div></div>
+      <div class="setting-row"><div class="setting-label">Quality Profile</div><div class="setting-control"><select name="quality_profile_id"><option value="">No Change</option>{{range .QualityProfiles}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select></div></div>
+      <div class="setting-row"><div class="setting-label">Root Folder</div><div class="setting-control"><select name="root_folder_id"><option value="">No Change</option>{{range .RootFolders}}<option value="{{.ID}}">{{.Path}}</option>{{end}}</select><label class="setting-check"><input type="checkbox" name="move_files" checked> Move each artist's folder into the new library folder</label></div></div>
+      <div id="music-editor-edit-result"></div>
+      <div class="form-row"><button class="btn btn-sm" type="submit">Apply Changes</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="music-editor-monitor" class="guide" data-editor-for="music" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/music/editor/monitor" hx-target="#music-editor-monitor-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Monitoring</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Monitor</div><div class="setting-control"><select name="monitor">{{range .AlbumMonitorOptions}}<option value="{{.Value}}" title="{{.Help}}">{{.Label}}</option>{{end}}</select><span class="setting-help">Sets which albums of every selected artist are monitored.</span></div></div>
+      <div id="music-editor-monitor-result"></div>
+      <div class="form-row"><button class="btn btn-sm" type="submit">Save</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="music-editor-delete" class="guide" data-editor-for="music" onclick="if (event.target === this) this.close()">
+  <form class="mm-form" hx-post="/music/editor/delete" hx-target="#music-editor-delete-result" hx-swap="innerHTML">
+    <div class="guide-head"><h2>Delete Selected Artists</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+    <div class="guide-body">
+      <div class="editor-ids"></div>
+      <p class="notice editor-summary"></p>
+      <div class="setting-row"><div class="setting-label">Delete Files</div><div class="setting-control"><label class="setting-check"><input type="checkbox" name="delete_files"> Delete each artist's folder and everything in it</label><span class="setting-help">A folder is only removed when it sits inside a library folder. Nothing goes to the recycle bin.</span></div></div>
+      <div id="music-editor-delete-result"></div>
+      <div class="form-row"><button class="btn btn-sm btn-danger" type="submit">Delete</button><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button></div>
+    </div>
+  </form>
+</dialog>
+
+<dialog id="overview-options" class="guide poster-options" data-prefs="ummarr-overview-music" data-grid='.poster-grid[data-library="music"]' data-prefix="ov-" data-sizeattr="ovsize" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Overview Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Poster Size</span><select class="select" name="size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <label class="poster-option"><span>Detailed Progress Bar</span><span class="poster-option-check"><input type="checkbox" name="detailed"> Show text on progress bar</span></label>
+      <label class="poster-option"><span>Show Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show monitored status</span></label>
+      <label class="poster-option"><span>Show Status</span><span class="poster-option-check"><input type="checkbox" name="status"> Show artist status (active / ended)</span></label>
+      <label class="poster-option"><span>Show Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show quality profile</span></label>
+      <label class="poster-option"><span>Show Album Count</span><span class="poster-option-check"><input type="checkbox" name="albums" checked> Show number of albums</span></label>
+      <label class="poster-option"><span>Show Track Count</span><span class="poster-option-check"><input type="checkbox" name="tracks"> Show number of tracks</span></label>
+      <label class="poster-option"><span>Show Added</span><span class="poster-option-check"><input type="checkbox" name="added"> Show date added</span></label>
+      <label class="poster-option"><span>Show Size on Disk</span><span class="poster-option-check"><input type="checkbox" name="sizeondisk" checked> Show size on disk</span></label>
+      <label class="poster-option"><span>Show Path</span><span class="poster-option-check"><input type="checkbox" name="path"> Show path</span></label>
+      <label class="poster-option"><span>Show Search</span><span class="poster-option-check"><input type="checkbox" name="search"> Show search button on hover</span></label>
+    </form>
+  </div>
+</dialog>
+
+<dialog id="table-options" class="guide poster-options" data-prefs="ummarr-table-music" data-grid='.poster-grid[data-library="music"]' data-prefix="col-" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Table Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <p class="notice">Columns to show. Click a column heading to sort by it.</p>
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show column</span></label>
+      <label class="poster-option"><span>Status</span><span class="poster-option-check"><input type="checkbox" name="status" checked> Show column</span></label>
+      <label class="poster-option"><span>Artist</span><span class="poster-option-check"><input type="checkbox" name="title" checked> Show column</span></label>
+      <label class="poster-option"><span>Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show column</span></label>
+      <label class="poster-option"><span>Albums</span><span class="poster-option-check"><input type="checkbox" name="albums" checked> Show column</span></label>
+      <label class="poster-option"><span>Tracks</span><span class="poster-option-check"><input type="checkbox" name="tracks" checked> Show column</span></label>
+      <label class="poster-option"><span>Path</span><span class="poster-option-check"><input type="checkbox" name="path"> Show column</span></label>
+      <label class="poster-option"><span>Size on Disk</span><span class="poster-option-check"><input type="checkbox" name="sizeondisk" checked> Show column</span></label>
+      <label class="poster-option"><span>Added</span><span class="poster-option-check"><input type="checkbox" name="added"> Show column</span></label>
+      <label class="poster-option"><span>Missing Albums</span><span class="poster-option-check"><input type="checkbox" name="missing"> Show column</span></label>
+    </form>
+  </div>
+</dialog>
+<dialog id="poster-options" class="guide poster-options" data-prefs="ummarr-poster-music" onclick="if (event.target === this) this.close()">
+  <div class="guide-head"><h2>Poster Options</h2><button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button></div>
+  <div class="guide-body">
+    <form class="poster-options-form" onsubmit="return false">
+      <label class="poster-option"><span>Poster Size</span><select class="select" name="size"><option value="small">Small</option><option value="medium">Medium</option><option value="large">Large</option></select></label>
+      <label class="poster-option"><span>Detailed Progress Bar</span><span class="poster-option-check"><input type="checkbox" name="detailed"> Show text on progress bar</span></label>
+      <label class="poster-option"><span>Show Name</span><span class="poster-option-check"><input type="checkbox" name="title"> Show artist name under poster</span></label>
+      <label class="poster-option"><span>Show Monitored</span><span class="poster-option-check"><input type="checkbox" name="monitored" checked> Show monitored status under poster</span></label>
+      <label class="poster-option"><span>Show Quality Profile</span><span class="poster-option-check"><input type="checkbox" name="profile" checked> Show quality profile under poster</span></label>
+      <label class="poster-option"><span>Show Status</span><span class="poster-option-check"><input type="checkbox" name="status"> Show artist status (active / ended) under poster</span></label>
+      <label class="poster-option"><span>Show Search</span><span class="poster-option-check"><input type="checkbox" name="search"> Show search button on hover</span></label>
+    </form>
+  </div>
+</dialog>
+
+<div class="section-head" style="margin-top:34px"><h2>Albums</h2><span class="section-count">{{len .Albums}}</span></div>
 <div class="grid">
   {{range .ArtistGroups}}
     {{if .Albums}}

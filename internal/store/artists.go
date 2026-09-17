@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 )
 
 // ArtistDetail is one artist's page: the summary plus what the library has.
@@ -144,4 +146,115 @@ func DeleteArtist(ctx context.Context, q Queryer, artistID int64) error {
 		return fmt.Errorf("delete artist %d: %w", artistID, err)
 	}
 	return nil
+}
+
+// ArtistLibrary is one row of the Music library page: an artist with the
+// counts the cards, filters and sorts need. GetArtistDetail answers the
+// same questions for one artist, but a library of hundreds can't afford
+// three queries each, so the aggregates are joined here instead.
+type ArtistLibrary struct {
+	ArtistSummary
+	QualityProfileName string
+	AlbumCount         int
+	AlbumsWithFiles    int
+	// MissingAlbums counts monitored, released albums with no files - what
+	// "Search all missing" would look for.
+	MissingAlbums int
+	TrackCount    int
+	TracksWithF   int
+	SizeOnDisk    int64
+	// Status is MusicBrainz's life-span as one word - "active", "ended",
+	// or "" when it hasn't been fetched since status was added. It is the
+	// music equivalent of a series being Continuing or Ended, and what the
+	// library's status filter reads.
+	Status string
+}
+
+// Ended reports whether the artist has finished (split up, died).
+func (a ArtistLibrary) Ended() bool { return a.Status == "ended" }
+
+// StatusLabel is the artist's status as the cards show it.
+func (a ArtistLibrary) StatusLabel() string {
+	switch a.Status {
+	case "ended":
+		return "Ended"
+	case "active":
+		return "Active"
+	}
+	return ""
+}
+
+// ListArtistLibrary lists every artist with its album/track counts.
+func ListArtistLibrary(ctx context.Context, q Queryer) ([]ArtistLibrary, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT a.id, a.artist_metadata_id, a.root_folder_id, a.quality_profile_id, am.name, a.path, a.monitored, a.added, am.images,
+		       COALESCE((SELECT p.name FROM quality_profiles p WHERE p.id = a.quality_profile_id), ''),
+		       COALESCE(am.status, ''),
+		       (SELECT COUNT(*) FROM albums al WHERE al.artist_metadata_id = a.artist_metadata_id),
+		       (SELECT COUNT(*) FROM albums al WHERE al.artist_metadata_id = a.artist_metadata_id
+		          AND EXISTS (SELECT 1 FROM album_releases r JOIN tracks t ON t.album_release_id = r.id
+		                      WHERE r.album_id = al.id AND t.track_file_id IS NOT NULL)),
+		       (SELECT COUNT(*) FROM albums al WHERE al.artist_metadata_id = a.artist_metadata_id
+		          AND al.monitored = 1
+		          AND (al.release_date IS NULL OR al.release_date <= CURRENT_TIMESTAMP)
+		          AND NOT EXISTS (SELECT 1 FROM album_releases r JOIN tracks t ON t.album_release_id = r.id
+		                          WHERE r.album_id = al.id AND t.track_file_id IS NOT NULL)),
+		       COALESCE((SELECT COUNT(*) FROM albums al JOIN album_releases r ON r.album_id = al.id
+		                 JOIN tracks t ON t.album_release_id = r.id WHERE al.artist_metadata_id = a.artist_metadata_id), 0),
+		       COALESCE((SELECT COUNT(*) FROM albums al JOIN album_releases r ON r.album_id = al.id
+		                 JOIN tracks t ON t.album_release_id = r.id
+		                 WHERE al.artist_metadata_id = a.artist_metadata_id AND t.track_file_id IS NOT NULL), 0),
+		       COALESCE((SELECT SUM(tf.size) FROM albums al JOIN album_releases r ON r.album_id = al.id
+		                 JOIN tracks t ON t.album_release_id = r.id JOIN track_files tf ON tf.id = t.track_file_id
+		                 WHERE al.artist_metadata_id = a.artist_metadata_id), 0)
+		FROM artists a JOIN artist_metadata am ON am.id = a.artist_metadata_id
+		ORDER BY a.added DESC`)
+	if err != nil {
+		return nil, fmt.Errorf("list artist library: %w", err)
+	}
+	defer rows.Close()
+
+	var out []ArtistLibrary
+	for rows.Next() {
+		var a ArtistLibrary
+		var images string
+		if err := rows.Scan(&a.ID, &a.ArtistMetadataID, &a.RootFolderID, &a.QualityProfileID, &a.Name, &a.Path, &a.Monitored, &a.Added, &images,
+			&a.QualityProfileName, &a.Status, &a.AlbumCount, &a.AlbumsWithFiles, &a.MissingAlbums, &a.TrackCount, &a.TracksWithF, &a.SizeOnDisk); err != nil {
+			return nil, fmt.Errorf("scan artist library row: %w", err)
+		}
+		a.PosterURL = firstOrEmpty(unmarshalStringSlice(images))
+		out = append(out, a)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	applyPosters(ctx, q, "artist", len(out), func(i int) int64 { return out[i].ID }, func(i int, url string) { out[i].PosterURL = url })
+	return out, nil
+}
+
+// TrackFileQualitiesByArtist lists the recorded quality of every track
+// file, by artist id - what the Music page needs to count files below
+// their profile's cutoff, the way the TV page counts episodes.
+func TrackFileQualitiesByArtist(ctx context.Context, q Queryer) (map[int64][]releaseparse.FileQuality, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT a.id, tf.quality
+		FROM artists a
+		JOIN albums al ON al.artist_metadata_id = a.artist_metadata_id
+		JOIN album_releases r ON r.album_id = al.id
+		JOIN tracks t ON t.album_release_id = r.id
+		JOIN track_files tf ON tf.id = t.track_file_id`)
+	if err != nil {
+		return nil, fmt.Errorf("track file qualities: %w", err)
+	}
+	defer rows.Close()
+	out := map[int64][]releaseparse.FileQuality{}
+	for rows.Next() {
+		var artistID int64
+		var raw string
+		if err := rows.Scan(&artistID, &raw); err != nil {
+			return nil, err
+		}
+		out[artistID] = append(out[artistID], unmarshalQuality(raw))
+	}
+	return out, rows.Err()
 }

@@ -360,3 +360,59 @@ func unmarshalQuality(raw string) releaseparse.FileQuality {
 	_ = json.Unmarshal([]byte(raw), &q)
 	return q
 }
+
+// AlbumFileQualities is the recorded quality of every track file of one
+// album - what a cutoff-unmet search compares against the profile.
+func AlbumFileQualities(ctx context.Context, q Queryer, albumID int64) ([]releaseparse.FileQuality, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT tf.quality FROM album_releases r
+		JOIN tracks t ON t.album_release_id = r.id
+		JOIN track_files tf ON tf.id = t.track_file_id
+		WHERE r.album_id = ?`, albumID)
+	if err != nil {
+		return nil, fmt.Errorf("album %d file qualities: %w", albumID, err)
+	}
+	defer rows.Close()
+	var out []releaseparse.FileQuality
+	for rows.Next() {
+		var raw string
+		if err := rows.Scan(&raw); err != nil {
+			return nil, err
+		}
+		out = append(out, unmarshalQuality(raw))
+	}
+	return out, rows.Err()
+}
+
+// ListUpgradableAlbums lists monitored albums (of monitored artists) that
+// DO have files - the candidates for a cutoff-unmet search, which is the
+// mirror image of what ListWantedAlbums returns.
+func ListUpgradableAlbums(ctx context.Context, q Queryer) ([]WantedAlbum, error) {
+	rows, err := q.QueryContext(ctx, wantedAlbumSelect+`
+		WHERE al.monitored = 1 AND COALESCE(ar.monitored, 1) = 1 AND EXISTS (
+			SELECT 1 FROM album_releases rel JOIN tracks t ON t.album_release_id = rel.id
+			WHERE rel.album_id = al.id AND t.track_file_id IS NOT NULL)
+		ORDER BY am.sort_name, al.title`)
+	if err != nil {
+		return nil, fmt.Errorf("list upgradable albums: %w", err)
+	}
+	var out []WantedAlbum
+	for rows.Next() {
+		var a WantedAlbum
+		if err := rows.Scan(&a.ID, &a.Artist, &a.Title, &a.ReleaseDate, &a.Monitored, &a.Queued, &a.QualityProfileID); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("scan upgradable album: %w", err)
+		}
+		out = append(out, a)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	for i := range out {
+		if err := loadWantedTracks(ctx, q, &out[i]); err != nil {
+			return nil, err
+		}
+	}
+	return out, nil
+}

@@ -163,3 +163,59 @@ func sortKeys(title string) (sortTitle, letter string) {
 	}
 	return sortTitle, letter
 }
+
+// artistCard is one Music library card: the artist plus the same sort,
+// filter and progress keys the series cards carry, so the Music page can
+// use the shared library grid (static/library-views.js) rather than a
+// second, simpler layout of its own.
+type artistCard struct {
+	store.ArtistLibrary
+	CutoffUnmet   int // track files below the profile's cutoff
+	Progress      int
+	ProgressClass string // done, partial, missing or unreleased
+	ProgressText  string
+	SortTitle     string
+	Letter        string
+	AddedUnix     int64
+	SizeHuman     string
+	AddedText     string
+	Slug          string
+}
+
+// StatusKey is what the status filter matches on: a library with artists
+// added before status existed would otherwise filter them all away, so an
+// unknown status counts as active - the same assumption the Music page's
+// "Active Only" label makes.
+func (a artistCard) StatusKey() string {
+	if a.Status == "ended" {
+		return "ended"
+	}
+	return "active"
+}
+
+func artistCards(artists []store.ArtistLibrary, profiles decision.Profiles, qualities map[int64][]releaseparse.FileQuality) []artistCard {
+	cards := make([]artistCard, 0, len(artists))
+	for _, a := range artists {
+		c := artistCard{ArtistLibrary: a, AddedUnix: a.Added.Unix(), Slug: titleutil.Slug(a.Name)}
+		c.ProgressText = fmt.Sprintf("%d / %d", a.AlbumsWithFiles, a.AlbumCount)
+		c.SortTitle, c.Letter = sortKeys(a.Name)
+		c.SizeHuman, c.AddedText = humanizeBytes(a.SizeOnDisk), a.Added.Format("2 Jan 2006")
+		for _, q := range qualities[a.ID] {
+			if profiles.CutoffUnmet(a.QualityProfileID, q) {
+				c.CutoffUnmet++
+			}
+		}
+		switch {
+		case a.AlbumCount == 0:
+			c.ProgressClass = "unreleased"
+		case a.AlbumsWithFiles >= a.AlbumCount:
+			c.Progress, c.ProgressClass = 100, "done"
+		case a.AlbumsWithFiles > 0:
+			c.Progress, c.ProgressClass = a.AlbumsWithFiles*100/a.AlbumCount, "partial"
+		default:
+			c.ProgressClass = "missing"
+		}
+		cards = append(cards, c)
+	}
+	return cards
+}

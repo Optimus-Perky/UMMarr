@@ -149,7 +149,7 @@ func editTags(ctx context.Context, q Queryer, table string, id int64, mode strin
 // SetRootFolder records that a movie or series now lives in another library
 // folder, at path.
 func SetRootFolder(ctx context.Context, q Queryer, table string, id, rootFolderID int64, path string) error {
-	if table != "movies" && table != "series" {
+	if table != "movies" && table != "series" && table != "artists" {
 		return fmt.Errorf("unknown library table %q", table)
 	}
 	if _, err := q.ExecContext(ctx, `UPDATE `+table+` SET root_folder_id = ?, path = ? WHERE id = ?`, rootFolderID, path, id); err != nil {

@@ -27,6 +27,16 @@
       {key: 'missing', label: 'Missing episodes', type: 'number', scale: 1},
       {key: 'monitored', label: 'Monitored', type: 'bool'},
       {key: 'cutoffunmet', label: 'Episodes below cutoff', type: 'number', scale: 1}
+    ],
+    music: [
+      {key: 'title', label: 'Artist', type: 'text'},
+      {key: 'profile', label: 'Quality profile', type: 'text'},
+      {key: 'status', label: 'Status', type: 'text'},
+      {key: 'path', label: 'Path', type: 'text'},
+      {key: 'albums', label: 'Albums', type: 'number', scale: 1},
+      {key: 'missing', label: 'Missing albums', type: 'number', scale: 1},
+      {key: 'monitored', label: 'Monitored', type: 'bool'},
+      {key: 'cutoffunmet', label: 'Tracks below cutoff', type: 'number', scale: 1}
     ]
   };
   var BUILT_IN = {
@@ -39,15 +49,18 @@
     downloaded: [{field: 'hasfile', op: 'is', value: 'yes'}],
     continuing: [{field: 'status', op: 'is', value: 'continuing'}],
     ended: [{field: 'status', op: 'is', value: 'ended'}],
+    active: [{field: 'status', op: 'is', value: 'active'}],
+    'missing-albums': [{field: 'monitored', op: 'is', value: 'yes'}, {field: 'missing', op: 'gt', value: '0'}],
     cutoff: [{field: 'cutoffunmet', op: 'is', value: 'yes'}],
-    'cutoff-episodes': [{field: 'cutoffunmet', op: 'gt', value: '0'}]
+    'cutoff-episodes': [{field: 'cutoffunmet', op: 'gt', value: '0'}],
+    'cutoff-albums': [{field: 'cutoffunmet', op: 'gt', value: '0'}]
   };
   var OPS = {
     text: [['contains', 'contains'], ['notcontains', 'does not contain'], ['is', 'is'], ['isnot', 'is not']],
     number: [['gt', 'greater than'], ['lt', 'less than'], ['eq', 'equal to']],
     bool: [['is', 'is']]
   };
-  var NUMERIC = {added: 1, year: 1, cinema: 1, digital: 1, physical: 1, size: 1, tmdb: 1, imdb: 1, tomato: 1, episodes: 1, missing: 1, cutoffunmet: 1};
+  var NUMERIC = {added: 1, year: 1, cinema: 1, digital: 1, physical: 1, size: 1, tmdb: 1, imdb: 1, tomato: 1, episodes: 1, albums: 1, missing: 1, cutoffunmet: 1};
 
   function load(key, fallback) { try { var v = JSON.parse(localStorage.getItem(key) || 'null'); return v === null ? fallback : v; } catch (e) { return fallback; } }
   function save(key, value) { try { localStorage.setItem(key, JSON.stringify(value)); } catch (e) {} }

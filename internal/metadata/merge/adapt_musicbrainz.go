@@ -14,6 +14,7 @@ func adaptMusicBrainzArtist(a *musicbrainz.Artist) artistSource {
 		Name:           a.Name,
 		Disambiguation: a.Disambiguation,
 		ArtistType:     a.Type,
+		Status:         a.Status(),
 		ExternalIDs:    map[string]string{"musicbrainz": a.ID},
 	}
 }

@@ -7,6 +7,29 @@ type Artist struct {
 	SortName       string `json:"sort-name"`
 	Disambiguation string `json:"disambiguation"`
 	Type           string `json:"type"`
+	// LifeSpan.Ended is how MusicBrainz says a band has split up or a
+	// person has died - the music answer to a series being Ended, which
+	// the library's Active/Ended filter reads. A lookup returns it; a
+	// search result usually doesn't.
+	LifeSpan struct {
+		Begin string `json:"begin"`
+		End   string `json:"end"`
+		Ended bool   `json:"ended"`
+	} `json:"life-span"`
+}
+
+// Status is the artist's life-span as one word, in the vocabulary the
+// library uses: "ended" when MusicBrainz has ended them, otherwise
+// "active". Empty when this came from a search result, which carries no
+// life-span at all - an unknown status must not read as active.
+func (a Artist) Status() string {
+	switch {
+	case a.LifeSpan.Ended || a.LifeSpan.End != "":
+		return "ended"
+	case a.LifeSpan.Begin != "":
+		return "active"
+	}
+	return ""
 }
 
 // ArtistSearchResponse is the body of GET /artist?query=.

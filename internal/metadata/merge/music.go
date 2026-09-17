@@ -16,6 +16,7 @@ func defaultArtistFieldPriority() map[string][]string {
 		"name":           {"musicbrainz"},
 		"disambiguation": {"musicbrainz"},
 		"artist_type":    {"musicbrainz"},
+		"status":         {"musicbrainz"},
 	}
 }
 
@@ -35,7 +36,9 @@ type artistSource struct {
 	Name           string
 	Disambiguation string
 	ArtistType     string
-	ExternalIDs    map[string]string
+	// Status is "active", "ended", or "" when the provider didn't say.
+	Status      string
+	ExternalIDs map[string]string
 }
 
 // MergeArtist merges any number of artistSources into one ArtistMetadata.
@@ -43,11 +46,13 @@ func MergeArtist(sources []artistSource) (metadata.ArtistMetadata, []metadata.Pr
 	priority := defaultArtistFieldPriority()
 
 	names, disambiguations, types := map[string]string{}, map[string]string{}, map[string]string{}
+	statuses := map[string]string{}
 	var externalIDSources []map[string]string
 	for _, s := range sources {
 		names[s.Provider] = s.Name
 		disambiguations[s.Provider] = s.Disambiguation
 		types[s.Provider] = s.ArtistType
+		statuses[s.Provider] = s.Status
 		externalIDSources = append(externalIDSources, s.ExternalIDs)
 	}
 
@@ -55,6 +60,7 @@ func MergeArtist(sources []artistSource) (metadata.ArtistMetadata, []metadata.Pr
 		Name:           pickString(priority["name"], names),
 		Disambiguation: pickString(priority["disambiguation"], disambiguations),
 		ArtistType:     pickString(priority["artist_type"], types),
+		Status:         pickString(priority["status"], statuses),
 		ExternalIDs:    externalIDsToMap(mergeExternalIDs(externalIDSources...)),
 	}
 
@@ -64,6 +70,7 @@ func MergeArtist(sources []artistSource) (metadata.ArtistMetadata, []metadata.Pr
 		{"name", result.Name.Provider},
 		{"disambiguation", result.Disambiguation.Provider},
 		{"artist_type", result.ArtistType.Provider},
+		{"status", result.Status.Provider},
 	} {
 		if p, ok := provenanceIfSet(entity, f.name, f.provider); ok {
 			provenance = append(provenance, p)

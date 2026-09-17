@@ -384,7 +384,7 @@ func (s *SearchService) searchAllMissing(ctx context.Context, mediaType, mode st
 			step(report)
 		}
 	case newznab.MediaMusic:
-		albums, err := store.ListWantedAlbums(ctx, s.DB)
+		albums, err := s.albumsToSearch(ctx, mode, engine.Profiles)
 		if err != nil {
 			return err
 		}
@@ -610,4 +610,32 @@ func wantedSeries(series []store.WantedSeries, mode string, profiles decision.Pr
 		}
 	}
 	return out
+}
+
+// albumsToSearch is the music half of wantedMovies/wantedSeries: the
+// albums a missing or cutoff-unmet search should look at. Missing means no
+// files at all; cutoff means the album has files, but at least one of them
+// is below its profile's cutoff, so an upgrade is worth searching for.
+func (s *SearchService) albumsToSearch(ctx context.Context, mode string, profiles decision.Profiles) ([]store.WantedAlbum, error) {
+	if mode != SearchCutoff {
+		return store.ListWantedAlbums(ctx, s.DB)
+	}
+	albums, err := store.ListUpgradableAlbums(ctx, s.DB)
+	if err != nil {
+		return nil, err
+	}
+	var out []store.WantedAlbum
+	for _, album := range albums {
+		qualities, err := store.AlbumFileQualities(ctx, s.DB, album.ID)
+		if err != nil {
+			return nil, err
+		}
+		for _, q := range qualities {
+			if profiles.CutoffUnmet(album.QualityProfileID, q) {
+				out = append(out, album)
+				break
+			}
+		}
+	}
+	return out, nil
 }

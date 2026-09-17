@@ -259,13 +259,55 @@ func (h *handler) MusicEditorSave(w http.ResponseWriter, r *http.Request) {
 		}
 		edit.QualityProfileID = &id
 	}
-	if edit.Monitored == nil && edit.QualityProfileID == nil {
+	rootFolder := r.FormValue("root_folder_id")
+	if edit.Monitored == nil && edit.QualityProfileID == nil && rootFolder == "" {
 		renderInlineError(w, "Choose something to change.")
 		return
 	}
-	if err := store.EditArtists(r.Context(), h.deps.DB, ids, edit); err != nil {
+	ctx := r.Context()
+	if err := store.EditArtists(ctx, h.deps.DB, ids, edit); err != nil {
 		renderInlineError(w, err.Error())
 		return
+	}
+	if rootFolder != "" {
+		rootID, err := strconv.ParseInt(rootFolder, 10, 64)
+		if err != nil {
+			renderInlineError(w, "Pick a library folder.")
+			return
+		}
+		moveFiles := r.FormValue("move_files") == "on"
+		var failures []string
+		for _, id := range ids {
+			if err := h.deps.Import.ChangeRootFolder(ctx, "artist", id, rootID, moveFiles); err != nil {
+				failures = append(failures, err.Error())
+			}
+		}
+		if len(failures) > 0 {
+			renderInlineError(w, fmt.Sprintf("Saved, but %d of %d artists couldn't change library folder: %s", len(failures), len(ids), firstFew(failures, 3)))
+			return
+		}
+	}
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/music?edited=%d", len(ids)))
+	w.WriteHeader(http.StatusOK)
+}
+
+// MusicEditorMonitor is the mass editor's Monitoring dialog: it sets which
+// albums of every selected artist are monitored, as Lidarr does.
+func (h *handler) MusicEditorMonitor(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ids := selectedIDs(r)
+	if len(ids) == 0 {
+		renderInlineError(w, "Select at least one artist.")
+		return
+	}
+	for _, id := range ids {
+		if err := store.ApplyAlbumMonitorOption(r.Context(), h.deps.DB, id, r.FormValue("monitor")); err != nil {
+			renderInlineError(w, err.Error())
+			return
+		}
 	}
 	w.Header().Set("HX-Redirect", fmt.Sprintf("/music?edited=%d", len(ids)))
 	w.WriteHeader(http.StatusOK)

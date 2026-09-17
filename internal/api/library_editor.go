@@ -29,8 +29,11 @@ func (n libraryNoun) plural(count int) string {
 
 // libraryNouns is what a kind is called and the page it lives on.
 func libraryNouns(kind string) (libraryNoun, string) {
-	if kind == "series" {
+	switch kind {
+	case "series":
 		return libraryNoun{"series", "series"}, "/tv"
+	case "music":
+		return libraryNoun{"artist", "artists"}, "/music"
 	}
 	return libraryNoun{"movie", "movies"}, "/movies"
 }
