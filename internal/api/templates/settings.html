@@ -257,31 +257,24 @@
 {{end}}
 
 <script>
-// Loading an indexer's form into the dialog opens it (and closes Add Indexer).
+// Loading a form into a settings dialog's body opens that dialog, and
+// closes the "add" chooser it was picked from. The rule is the ids: a
+// swap into "<name>-dialog-body" opens <dialog id="<name>-dialog"> and
+// closes "<name>-add-dialog" if there is one. Panels that named their
+// dialog but had no opener (Metadata Sources, Custom Formats) silently
+// swapped the form into a hidden dialog, so every button looked dead -
+// listing each dialog by hand is what made that possible.
 (function () {
-  if (window.ummarrIndexerDialogs) return;
-  window.ummarrIndexerDialogs = true;
+  if (window.ummarrSettingsDialogs) return;
+  window.ummarrSettingsDialogs = true;
   document.body.addEventListener('htmx:afterSwap', function (e) {
-    if (e.detail.target && e.detail.target.id === 'import-list-dialog-body') {
-      var addL = document.getElementById('import-list-add-dialog'); if (addL && addL.open) addL.close();
-      var lDialog = document.getElementById('import-list-dialog'); if (lDialog && !lDialog.open) lDialog.showModal();
-      return;
-    }
-    if (e.detail.target && e.detail.target.id === 'notification-dialog-body') {
-      var addN = document.getElementById('notification-add-dialog'); if (addN && addN.open) addN.close();
-      var nDialog = document.getElementById('notification-dialog'); if (nDialog && !nDialog.open) nDialog.showModal();
-      return;
-    }
-    if (e.detail.target && e.detail.target.id === 'download-client-dialog-body') {
-      var addDC = document.getElementById('download-client-add-dialog'); if (addDC && addDC.open) addDC.close();
-      var dcDialog = document.getElementById('download-client-dialog'); if (dcDialog && !dcDialog.open) dcDialog.showModal();
-      return;
-    }
-    if (!e.detail.target || e.detail.target.id !== 'indexer-dialog-body') return;
-    var add = document.getElementById('indexer-add-dialog');
+    var body = e.detail.target;
+    if (!body || !body.id || body.id.slice(-12) !== '-dialog-body') return;
+    var dialog = document.getElementById(body.id.slice(0, -5));
+    if (!dialog || dialog.tagName !== 'DIALOG') return;
+    var add = document.getElementById(body.id.slice(0, -12) + '-add-dialog');
     if (add && add.open) add.close();
-    var dialog = document.getElementById('indexer-dialog');
-    if (dialog && !dialog.open) dialog.showModal();
+    if (!dialog.open) dialog.showModal();
   });
 })();
 </script>
