@@ -225,10 +225,16 @@ silently missing regardless of what MusicBrainz actually returned.
 ```
 go run ./cmd/ummarr migrate --db ummarr.db   # apply pending migrations only
 go run ./cmd/ummarr serve --db ummarr.db     # run the web UI (default :8080)
+go run ./cmd/ummarr episode-names --db ummarr.db "MobLand"   # one task, no UI
 ```
 
 `migrate` applies any pending migrations to the given SQLite file (created
-if it doesn't exist). `serve` does the same, then starts the web server -
+if it doesn't exist). `episode-names` runs the Find episode names task
+headlessly - every series with unnamed episodes, or the one whose title
+matches the argument (`--season N` narrows it further). It is safe to run
+against a live database, and against a running container:
+`docker exec ummarr /ummarr episode-names --db /config/ummarr.db "MobLand"`.
+`serve` applies migrations too, then starts the web server -
 set `UMMARR_LISTEN_ADDR` to change the bind address (default `:8080`).
 Postgres support is planned via `jackc/pgx/v5` but not yet wired up —
 SQLite (via `modernc.org/sqlite`, pure Go, no cgo) is the only driver

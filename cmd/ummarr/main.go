@@ -13,6 +13,7 @@ import (
 
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"fmt"
 	"io"
 	"log"
@@ -70,6 +71,51 @@ func main() {
 			return nil
 		},
 	})
+
+	// The same work as the "Find episode names" task, runnable without the
+	// web UI: handy over `docker exec`, and the only way in when whoever
+	// holds the login isn't at the keyboard. Safe alongside a running
+	// server - the database is WAL with a 60s busy timeout (internal/store/
+	// store.go), so the two processes take turns rather than collide.
+	var episodeNamesSeason int
+	episodeNames := &cobra.Command{
+		Use:   "episode-names [series title]",
+		Short: "Ask the metadata providers for missing episode titles, summaries and air dates",
+		Long: "With no argument this covers every series that still has unnamed episodes,\n" +
+			"exactly like the Find episode names task. With a title (a case-insensitive\n" +
+			"substring, which must match one series) it does that series alone.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := store.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			cfg := config.Load()
+			svc := &sync.SeriesService{DB: db, TMDB: tmdb.New(tmdb.Options{Token: cfg.TMDBToken, UserAgent: cfg.UserAgent}),
+				TVMaze: tvmaze.New(tvmaze.Options{UserAgent: cfg.UserAgent}), UserAgent: cfg.UserAgent}
+			ctx := cmd.Context()
+
+			if len(args) == 0 {
+				report, err := svc.SearchMissingEpisodeNames(ctx)
+				fmt.Println(report.Summary())
+				return err
+			}
+			seriesID, title, err := findSeriesByTitle(ctx, db, args[0])
+			if err != nil {
+				return err
+			}
+			var season *int
+			if episodeNamesSeason >= 0 {
+				season = &episodeNamesSeason
+			}
+			report, err := svc.SearchEpisodeNames(ctx, seriesID, season)
+			fmt.Printf("%s: %s\n", title, report.Summary())
+			return err
+		},
+	}
+	episodeNames.Flags().IntVar(&episodeNamesSeason, "season", -1, "only this season number (default: every season)")
+	root.AddCommand(episodeNames)
 
 	root.AddCommand(&cobra.Command{
 		Use:   "serve",
@@ -355,6 +401,33 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
+}
+
+// findSeriesByTitle resolves a title typed on the command line to one
+// series. A substring is enough, but an ambiguous one is an error listing
+// the candidates rather than a guess at which series to rewrite.
+func findSeriesByTitle(ctx context.Context, db *sql.DB, want string) (int64, string, error) {
+	all, err := store.ListSeries(ctx, db)
+	if err != nil {
+		return 0, "", err
+	}
+	var matches []store.SeriesSummary
+	for _, s := range all {
+		if strings.Contains(strings.ToLower(s.Title), strings.ToLower(want)) {
+			matches = append(matches, s)
+		}
+	}
+	switch len(matches) {
+	case 1:
+		return matches[0].ID, matches[0].Title, nil
+	case 0:
+		return 0, "", fmt.Errorf("no series matches %q", want)
+	}
+	var titles []string
+	for _, m := range matches {
+		titles = append(titles, m.Title)
+	}
+	return 0, "", fmt.Errorf("%q matches %d series: %s", want, len(matches), strings.Join(titles, ", "))
 }
 
 // healthcheckHost turns a bind-all listen address like ":8080" into
