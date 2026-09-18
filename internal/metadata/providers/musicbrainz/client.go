@@ -152,3 +152,16 @@ func (c *Client) GetArtistReleaseGroups(ctx context.Context, artistMBID string) 
 		}
 	}
 }
+
+// ListReleases returns every release (pressing/edition) of a release group,
+// with the track count and country that tell them apart - a 13-track UK
+// release against a 16-track Japanese one. Cheap next to fetching each
+// release in full, which is why the picker uses it.
+func (c *Client) ListReleases(ctx context.Context, releaseGroupMBID string) ([]ReleaseRef, error) {
+	var rg ReleaseGroup
+	query := url.Values{"inc": {"releases+media"}}
+	if err := c.get(ctx, "/release-group/"+releaseGroupMBID, query, &rg); err != nil {
+		return nil, err
+	}
+	return rg.Releases, nil
+}

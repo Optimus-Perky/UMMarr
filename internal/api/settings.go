@@ -661,3 +661,18 @@ func (h *handler) UpdateMetadataSettings(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(`<p class="indexer-test ok">Saved. New imports get metadata; System → Tasks → Write metadata does the whole library.</p>`))
 }
+
+// DeleteQualityProfile removes a profile nothing is using.
+func (h *handler) DeleteQualityProfile(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid quality profile id", http.StatusBadRequest)
+		return
+	}
+	if err := store.DeleteQualityProfile(r.Context(), h.deps.DB, id); err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	w.Header().Set("HX-Redirect", "/settings/profiles")
+	w.WriteHeader(http.StatusOK)
+}

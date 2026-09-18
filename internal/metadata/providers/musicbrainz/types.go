@@ -1,5 +1,7 @@
 package musicbrainz
 
+import "fmt"
+
 // Artist matches a MusicBrainz artist entity.
 type Artist struct {
 	ID             string `json:"id"`
@@ -62,10 +64,38 @@ type Relation struct {
 // separate search call before fetching its full track listing via
 // Client.GetRelease.
 type ReleaseRef struct {
-	ID     string `json:"id"`
-	Title  string `json:"title"`
-	Status string `json:"status"`
-	Date   string `json:"date"`
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Status  string `json:"status"`
+	Date    string `json:"date"`
+	Country string `json:"country"`
+	// Media is only filled in when the request asks for inc=media, which
+	// ListReleases does: its track count is how an edition is told apart
+	// from another - 13 tracks for a UK release, 16 for a Japanese one.
+	Media []struct {
+		Format     string `json:"format"`
+		TrackCount int    `json:"track-count"`
+	} `json:"media,omitempty"`
+}
+
+// TrackCount totals the tracks across all of the release's media.
+func (r ReleaseRef) TrackCount() int {
+	n := 0
+	for _, m := range r.Media {
+		n += m.TrackCount
+	}
+	return n
+}
+
+// Format names the media, e.g. "CD" or "2xCD".
+func (r ReleaseRef) Format() string {
+	if len(r.Media) == 0 {
+		return ""
+	}
+	if len(r.Media) == 1 {
+		return r.Media[0].Format
+	}
+	return fmt.Sprintf("%dx%s", len(r.Media), r.Media[0].Format)
 }
 
 // ReleaseGroup matches a MusicBrainz release-group entity (UMMarr's

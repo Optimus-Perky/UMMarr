@@ -709,3 +709,20 @@ func UpdateTrackFilePath(ctx context.Context, q Queryer, fileID int64, relativeP
 	}
 	return nil
 }
+
+// CurrentReleaseMBID is the MusicBrainz id of the release an album tracks
+// now, or "" when it has none.
+func CurrentReleaseMBID(ctx context.Context, q Queryer, albumID int64) (string, error) {
+	var mbid string
+	err := q.QueryRowContext(ctx, `
+		SELECT COALESCE(e.external_id, '')
+		FROM album_releases ar
+		LEFT JOIN external_ids e ON e.entity_type = 'release' AND e.entity_id = ar.id AND e.provider = 'musicbrainz'
+		WHERE ar.album_id = ?
+		ORDER BY ar.monitored DESC, (SELECT COUNT(*) FROM tracks t WHERE t.album_release_id = ar.id) DESC, ar.id ASC
+		LIMIT 1`, albumID).Scan(&mbid)
+	if err != nil {
+		return "", err
+	}
+	return mbid, nil
+}

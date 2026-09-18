@@ -235,7 +235,6 @@ func main() {
 			indexerService := &sync.IndexerService{DB: db, UserAgent: cfg.UserAgent}
 			movieService := &sync.MovieService{DB: db, TMDB: tmdbClient, OMDb: omdbClient}
 			seriesService := &sync.SeriesService{DB: db, TMDB: tmdbClient, TVMaze: tvmazeClient, UserAgent: cfg.UserAgent}
-			musicService := &sync.MusicService{DB: db, MusicBrainz: musicBrainzClient}
 			notifier := &notify.Service{DB: db, UserAgent: cfg.UserAgent}
 			// Media analysis: FFprobe when it's installed (the image bundles it).
 			var probe func(context.Context, string) (mediainfo.Info, error)
@@ -245,6 +244,8 @@ func main() {
 				probe = prober.Probe
 			}
 			mediaAnalyzer := &sync.MediaAnalyzer{DB: db, Probe: probe, Workers: 2}
+			// After probe exists: the release picker reads the files' own tags.
+			musicService := &sync.MusicService{DB: db, MusicBrainz: musicBrainzClient, Probe: probe}
 			store.MediaInfoTokens = func(ctx context.Context, path string) map[string]string {
 				if probe == nil {
 					return nil

@@ -1,0 +1,40 @@
+{{define "album_releases"}}
+{{$album := .Album}}
+<form hx-post="/music/albums/{{$album.ID}}/release" hx-target="#release-choice-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Release - {{$album.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    {{if .Err}}<p class="indexer-test failed">{{.Err}}</p>{{else}}
+    <p class="notice">One album, many pressings: a UK CD with 13 tracks and a Japanese one with 16 are different releases of the same album. Pick the one you actually have - the tracks UMMarr expects, and so what counts as missing, come from it.</p>
+    <table class="data-table">
+      <thead><tr><th></th><th>Release</th><th>Tracks</th><th>Country</th><th>Released</th><th>Format</th><th>Status</th></tr></thead>
+      <tbody>
+        {{range .Choices}}
+        <tr>
+          <td class="col-tight"><input type="radio" name="release" value="{{.MBID}}"{{if or .Current .Tagged}} checked{{end}}></td>
+          <td class="wrap">{{.Title}}
+            {{if .Tagged}}<span class="chip chip-good" title="{{.Files}} of this album's files carry this release's MusicBrainz id">your files say this one</span>{{end}}
+            {{if .Current}}<span class="chip chip-info">in use</span>{{end}}
+          </td>
+          <td class="nowrap">{{if .TrackCount}}{{.TrackCount}}{{else}}?{{end}}</td>
+          <td class="nowrap">{{.Country}}</td>
+          <td class="nowrap">{{.Date}}</td>
+          <td class="nowrap">{{.Format}}</td>
+          <td class="nowrap">{{.Status}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    <p class="setting-help" style="margin-top:8px">Switching re-reads the chosen release from MusicBrainz. Your files stay where they are; anything whose track disappears is listed in Manage Track Files to be matched by hand.</p>
+    {{end}}
+    <div id="release-choice-result"></div>
+  </div>
+  <div class="dialog-foot">
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    {{if .Choices}}<button class="btn btn-sm" type="submit">Use this release</button>{{end}}
+  </div>
+</form>
+{{end}}

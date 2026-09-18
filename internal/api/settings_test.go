@@ -264,3 +264,58 @@ func TestScanLibrary_ScopedToOneFolder(t *testing.T) {
 		t.Fatalf("want the movie scan to import the movie, got:\n%s", body)
 	}
 }
+
+// A quality profile can be removed, but only when nothing is using it -
+// deleting one out from under a movie would leave it pointing at a profile
+// that no longer exists.
+func TestDeleteQualityProfile(t *testing.T) {
+	db := openTestDB(t)
+	srv := newTestServerWithDB(t, db)
+	ctx := t.Context()
+
+	keep, err := store.CreateQualityProfile(ctx, db, "Keep")
+	if err != nil {
+		t.Fatal(err)
+	}
+	spare, err := store.CreateQualityProfile(ctx, db, "Spare")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// The Remove button is offered per profile.
+	_, body := get(t, srv, "/settings/profiles")
+	if !strings.Contains(body, `hx-delete="/settings/quality-profiles/`+itoa(spare)+`"`) {
+		t.Errorf("want a Remove button for each quality profile, got:\n%s", body)
+	}
+
+	// An unused one goes.
+	resp, body := deleteForm(t, srv, "/settings/quality-profiles/"+itoa(spare), nil)
+	if resp.StatusCode != 200 || resp.Header.Get("HX-Redirect") == "" {
+		t.Fatalf("delete = %d: %s", resp.StatusCode, body)
+	}
+	profiles, _ := store.ListQualityProfiles(ctx, db)
+	for _, p := range profiles {
+		if p.ID == spare {
+			t.Error("want the spare profile gone")
+		}
+	}
+
+	// One in use is refused, and says what is using it.
+	root, err := store.CreateRootFolder(ctx, db, t.TempDir(), "movie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO movie_metadata (title, clean_title, sort_title) VALUES ('Heat', 'heat', 'heat')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO movies (movie_metadata_id, quality_profile_id, root_folder_id, monitored, added) VALUES (1, ?, ?, 1, CURRENT_TIMESTAMP)`, keep, root); err != nil {
+		t.Fatal(err)
+	}
+	_, body = deleteForm(t, srv, "/settings/quality-profiles/"+itoa(keep), nil)
+	if !strings.Contains(body, "1 movie still using this profile") {
+		t.Errorf("want the refusal to name what is using it, got: %s", body)
+	}
+	if profiles, _ := store.ListQualityProfiles(ctx, db); len(profiles) == 0 {
+		t.Fatal("want the profile kept")
+	}
+}

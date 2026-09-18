@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/merge"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/musicbrainz"
@@ -15,6 +16,10 @@ import (
 type MusicService struct {
 	DB          *sql.DB
 	MusicBrainz *musicbrainz.Client
+	// Probe reads a file with FFprobe, so the release picker can say which
+	// release the album's own files claim to be. Nil just leaves that
+	// unknown.
+	Probe func(context.Context, string) (mediainfo.Info, error)
 }
 
 // AddArtistByMBID fetches an artist from MusicBrainz and persists both
@@ -110,10 +115,14 @@ func (s *MusicService) syncRepresentativeRelease(ctx context.Context, rg *musicb
 	if releaseRef == nil {
 		return nil // no releases listed - nothing to sync tracks from
 	}
+	return s.syncRelease(ctx, albumID, releaseRef.ID)
+}
 
-	release, err := s.MusicBrainz.GetRelease(ctx, releaseRef.ID)
+// syncRelease writes one specific release's tracks onto an album.
+func (s *MusicService) syncRelease(ctx context.Context, albumID int64, releaseMBID string) error {
+	release, err := s.MusicBrainz.GetRelease(ctx, releaseMBID)
 	if err != nil {
-		return fmt.Errorf("fetch musicbrainz release %s: %w", releaseRef.ID, err)
+		return fmt.Errorf("fetch musicbrainz release %s: %w", releaseMBID, err)
 	}
 	mergedRelease, tracks, _ := merge.MergeReleaseFromProvider(release)
 

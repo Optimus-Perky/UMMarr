@@ -564,3 +564,54 @@ func (h *handler) AlbumRematchApply(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albums/%d?rematched=%d", albumID, moved))
 	w.WriteHeader(http.StatusOK)
 }
+
+type releaseChoicesData struct {
+	Album   store.AlbumDetail
+	Choices []sync.ReleaseChoice
+	Err     string
+}
+
+// AlbumReleasePicker lists the release group's releases so the right
+// edition can be chosen - the 13-track UK CD rather than the 16-track
+// Japanese one UMMarr happened to pick.
+func (h *handler) AlbumReleasePicker(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	album, found, err := store.GetAlbumDetail(r.Context(), h.deps.DB, albumID)
+	if err != nil || !found {
+		http.NotFound(w, r)
+		return
+	}
+	data := releaseChoicesData{Album: album}
+	if h.deps.Music == nil {
+		data.Err = "MusicBrainz isn't configured."
+		h.renderPartial(w, "album_releases", data)
+		return
+	}
+	choices, err := h.deps.Music.ReleaseChoices(r.Context(), albumID)
+	if err != nil {
+		data.Err = err.Error()
+	}
+	data.Choices = choices
+	h.renderPartial(w, "album_releases", data)
+}
+
+// AlbumChooseRelease switches the album to the chosen release.
+func (h *handler) AlbumChooseRelease(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if err := h.deps.Music.ChooseRelease(r.Context(), albumID, r.FormValue("release")); err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albums/%d?release=1", albumID))
+	w.WriteHeader(http.StatusOK)
+}

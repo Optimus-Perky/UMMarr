@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 )
@@ -204,4 +205,69 @@ func UpdateQualityProfileUpgrades(ctx context.Context, q Queryer, profileID int6
 		return fmt.Errorf("update quality profile %d upgrades: %w", profileID, err)
 	}
 	return nil
+}
+
+// QualityProfileUsage counts what a profile is attached to, so deleting one
+// that is still in use can be refused rather than silently leaving movies,
+// series or artists pointing at a profile that no longer exists.
+func QualityProfileUsage(ctx context.Context, q Queryer, id int64) (movies, series, artists int, err error) {
+	err = q.QueryRowContext(ctx, `
+		SELECT (SELECT COUNT(*) FROM movies WHERE quality_profile_id = ?),
+		       (SELECT COUNT(*) FROM series WHERE quality_profile_id = ?),
+		       (SELECT COUNT(*) FROM artists WHERE quality_profile_id = ?)`, id, id, id).
+		Scan(&movies, &series, &artists)
+	if err != nil {
+		return 0, 0, 0, fmt.Errorf("quality profile %d usage: %w", id, err)
+	}
+	return movies, series, artists, nil
+}
+
+// DeleteQualityProfile removes a profile nothing uses. The last profile
+// stays: with none at all, nothing could be added. When the default is
+// removed, the oldest remaining profile takes over, so there is always one
+// for the Add forms to preselect.
+func DeleteQualityProfile(ctx context.Context, q Queryer, id int64) error {
+	movies, series, artists, err := QualityProfileUsage(ctx, q, id)
+	if err != nil {
+		return err
+	}
+	if n := movies + series + artists; n > 0 {
+		var parts []string
+		for _, use := range []struct {
+			n    int
+			noun string
+		}{{movies, "movie"}, {series, "series"}, {artists, "artist"}} {
+			if use.n > 0 {
+				parts = append(parts, fmt.Sprintf("%d %s", use.n, plural(use.n, use.noun)))
+			}
+		}
+		return fmt.Errorf("%s still using this profile - move them to another profile first", strings.Join(parts, ", "))
+	}
+	var total int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM quality_profiles`).Scan(&total); err != nil {
+		return fmt.Errorf("count quality profiles: %w", err)
+	}
+	if total <= 1 {
+		return fmt.Errorf("this is the only quality profile - add another before removing it")
+	}
+	var wasDefault bool
+	_ = q.QueryRowContext(ctx, `SELECT is_default FROM quality_profiles WHERE id = ?`, id).Scan(&wasDefault)
+	if _, err := q.ExecContext(ctx, `DELETE FROM quality_profiles WHERE id = ?`, id); err != nil {
+		return fmt.Errorf("delete quality profile %d: %w", id, err)
+	}
+	if wasDefault {
+		var next int64
+		if err := q.QueryRowContext(ctx, `SELECT id FROM quality_profiles ORDER BY id LIMIT 1`).Scan(&next); err == nil {
+			return SetDefaultQualityProfile(ctx, q, next)
+		}
+	}
+	return nil
+}
+
+// plural is "movie"/"movies", and leaves an already-plural noun alone.
+func plural(n int, noun string) string {
+	if n == 1 || strings.HasSuffix(noun, "s") {
+		return noun
+	}
+	return noun + "s"
 }
