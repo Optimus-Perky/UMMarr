@@ -186,7 +186,14 @@ func formatSize(bytes int64) string {
 // release judges what doesn't depend on the item: quality, protocol, age,
 // size, the indexer's own rules and (for video) hardcoded subtitles.
 func (e *Engine) release(r newznab.Release, profileID sql.NullInt64, video bool) Decision {
-	d := Decision{Release: r, Quality: releaseparse.Parse(r.Title), Revision: releaseparse.ParseRevision(r.Title)}
+	// Music is judged on format and bitrate, not resolution and source: a
+	// FLAC release has no quality at all in the video catalog, so parsing
+	// it that way would reject every album as "Unknown isn't wanted".
+	quality := releaseparse.Parse(r.Title)
+	if !video {
+		quality = releaseparse.FileQuality{Audio: releaseparse.ParseAudio(r.Title), ReleaseGroup: quality.ReleaseGroup}
+	}
+	d := Decision{Release: r, Quality: quality, Revision: releaseparse.ParseRevision(r.Title)}
 	weight, allowed := releaseparse.Score(e.profile(profileID), d.Quality)
 	d.Weight = weight
 	d.QualityAllowed = allowed
@@ -712,7 +719,13 @@ func (ps Profiles) Get(id sql.NullInt64) Profile {
 			return p
 		}
 	}
-	return Profile{Items: store.DefaultQualityProfileItems()}
+	// No profile at all: allow everything either catalog knows, so a
+	// release is still judged on its other rules rather than rejected for
+	// a quality nothing listed. Weights restart per catalog, which only
+	// matters when comparing releases of one item - and those share a kind.
+	items := store.DefaultQualityProfileItems(store.MediaKindVideo)
+	items = append(items, store.DefaultQualityProfileItems(store.MediaKindAudio)...)
+	return Profile{Items: items}
 }
 
 // CutoffWeight is the weight a file must reach for upgrades to stop: the

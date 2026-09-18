@@ -115,7 +115,7 @@ func TestMovie_ReleaseRules(t *testing.T) {
 
 func TestMovie_QualityProfile(t *testing.T) {
 	e := engine()
-	items := store.DefaultQualityProfileItems()
+	items := store.DefaultQualityProfileItems(store.MediaKindVideo)
 	for i := range items {
 		if items[i].Quality == "Unknown" || items[i].Quality == "HDTV-720p" {
 			items[i].Allowed = false
@@ -409,7 +409,7 @@ func TestSort_KeywordScore(t *testing.T) {
 }
 
 func profileWith(upgrades bool, cutoff string) Profile {
-	items := store.DefaultQualityProfileItems()
+	items := store.DefaultQualityProfileItems(store.MediaKindVideo)
 	return Profile{Items: items, UpgradeAllowed: upgrades, Cutoff: cutoff}
 }
 
@@ -463,5 +463,43 @@ func TestMovie_Upgrades(t *testing.T) {
 	m.FileQuality = releaseparse.Parse("Inception 2010 2160p Remux")
 	if e.Profiles.CutoffUnmet(m.QualityProfileID, m.FileQuality) {
 		t.Errorf("want the best quality to meet the cutoff")
+	}
+}
+
+// Music releases are judged on the audio catalog. Before this, an album
+// release was parsed for resolution and source - which a FLAC has none of -
+// so every album came out "Unknown" and an audio profile could never
+// prefer lossless over a 128kbps rip.
+func TestAlbum_JudgedOnAudioQuality(t *testing.T) {
+	e := engine()
+	e.Profiles = Profiles{7: {Items: store.DefaultQualityProfileItems(store.MediaKindAudio), UpgradeAllowed: true}}
+	album := store.WantedAlbum{
+		ID: 1, Artist: "Portishead", Title: "Dummy", Monitored: true,
+		QualityProfileID: sql.NullInt64{Int64: 7, Valid: true},
+	}
+	releases := []newznab.Release{
+		torrent("Portishead - Dummy (1994) [MP3 128]"),
+		torrent("Portishead - Dummy (1994) [FLAC 24bit]"),
+		torrent("Portishead - Dummy (1994) [FLAC]"),
+	}
+	decisions := e.Album(album, releases)
+	if len(decisions) != 3 {
+		t.Fatalf("want a decision per release, got %d", len(decisions))
+	}
+	for _, d := range decisions {
+		if d.Quality.Key() == "Unknown" {
+			t.Errorf("%q came out Unknown: %+v", d.Release.Title, d.Quality)
+		}
+		if !d.QualityAllowed {
+			t.Errorf("%q not allowed by an all-audio profile: %v", d.Release.Title, d.Rejections)
+		}
+	}
+	// Best first, and lossless 24-bit outranks a 128kbps rip.
+	best, ok := Best(decisions)
+	if !ok {
+		t.Fatal("want a best release")
+	}
+	if best.Quality.Key() != "FLAC-24bit" {
+		t.Errorf("best release is %q (%s), want the FLAC 24bit", best.Release.Title, best.Quality.Key())
 	}
 }

@@ -66,6 +66,7 @@ type settingsPageData struct {
 	PageTitle        string
 	RootFolders      []rootFolderView
 	QualityProfiles  []store.QualityProfile
+	AudioProfiles    []store.QualityProfile
 	PreferredWords   []store.PreferredWord
 	Indexers         []indexerView
 	IndexerSyncHint  bool
@@ -184,7 +185,8 @@ func (h *handler) loadSettingsPage(ctx context.Context) (settingsPageData, error
 		Active:          "settings",
 		PageTitle:       "Settings",
 		RootFolders:     rootFolderViews(ctx, h.deps.DB, rootFolders),
-		QualityProfiles: qualityProfiles,
+		QualityProfiles: videoProfiles(qualityProfiles),
+		AudioProfiles:   audioProfiles(qualityProfiles),
 		PreferredWords:  preferredWords,
 		Indexers:        indexers,
 		IndexerSyncHint: syncHint,
@@ -342,7 +344,9 @@ func (h *handler) CreateQualityProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := store.CreateQualityProfile(r.Context(), h.deps.DB, name); err != nil {
+	// media_kind says which catalog it is built from: video for movies and
+	// series, audio for music.
+	if _, err := store.CreateQualityProfileOfKind(r.Context(), h.deps.DB, name, r.FormValue("media_kind")); err != nil {
 		renderAddError(w, err)
 		return
 	}
@@ -723,4 +727,25 @@ type profileInUseData struct {
 	Message                 string
 	Others                  []store.QualityProfile
 	Movies, Series, Artists int
+}
+
+// videoProfiles and audioProfiles split the one list the Settings page
+// loads, so Profiles can show movies-and-series rows apart from music rows
+// - their catalogs have nothing in common.
+func videoProfiles(all []store.QualityProfile) []store.QualityProfile {
+	return profilesOfKind(all, store.MediaKindVideo)
+}
+
+func audioProfiles(all []store.QualityProfile) []store.QualityProfile {
+	return profilesOfKind(all, store.MediaKindAudio)
+}
+
+func profilesOfKind(all []store.QualityProfile, kind string) []store.QualityProfile {
+	var out []store.QualityProfile
+	for _, p := range all {
+		if p.MediaKind == kind {
+			out = append(out, p)
+		}
+	}
+	return out
 }

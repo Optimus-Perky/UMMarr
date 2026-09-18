@@ -62,9 +62,16 @@ func TestBackupAndRestore(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db2.Close()
+	// What the backup held: the profile the test made, and the audio one
+	// migration 47 seeds. "Extra" was added after the backup, so restoring
+	// has to have taken it away again.
 	profiles, _ := store.ListQualityProfiles(context.Background(), db2)
-	if len(profiles) != 1 || profiles[0].Name != "Any" {
-		t.Fatalf("want the backup's single profile back, got %+v", profiles)
+	names := map[string]bool{}
+	for _, p := range profiles {
+		names[p.Name] = true
+	}
+	if !names["Any"] || names["Extra"] {
+		t.Fatalf("want the backup's profiles back and Extra gone, got %+v", profiles)
 	}
 	if matches, _ := filepath.Glob(dbPath + ".pre-restore-*"); len(matches) != 1 {
 		t.Fatalf("want the replaced database kept aside, got %v", matches)

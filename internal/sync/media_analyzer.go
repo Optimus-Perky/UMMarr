@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
+	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -271,6 +272,16 @@ func (a *MediaAnalyzer) analyze(ctx context.Context, f store.MediaFile, plexFile
 	if err := store.SaveMediaInfo(ctx, a.DB, f.Kind, f.ID, info); err != nil {
 		log.Printf("analyze media files: save %s: %v", path, err)
 		return
+	}
+	// A music file's quality is its format, bit depth and bitrate, which
+	// only reading the file can give: a FLAC rarely says so in its name,
+	// and the video catalog has nothing to say about it either way.
+	if f.Kind == "track" && info.Error == "" {
+		if audio := AudioQualityFromInfo(info); !audio.Empty() {
+			if err := store.UpdateTrackFileQuality(ctx, a.DB, f.ID, releaseparse.FileQuality{Audio: audio}); err != nil {
+				log.Printf("analyze media files: record audio quality for %s: %v", path, err)
+			}
+		}
 	}
 	a.mu.Lock()
 	switch {

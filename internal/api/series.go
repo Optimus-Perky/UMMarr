@@ -38,7 +38,7 @@ func (h *handler) Series(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	qualityProfiles, err := store.ListQualityProfiles(ctx, h.deps.DB)
+	qualityProfiles, err := store.ListQualityProfilesOfKind(ctx, h.deps.DB, "series")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -101,7 +101,7 @@ func (h *handler) SeriesSearch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	qualityProfiles, err := store.ListQualityProfiles(ctx, h.deps.DB)
+	qualityProfiles, err := store.ListQualityProfilesOfKind(ctx, h.deps.DB, "series")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

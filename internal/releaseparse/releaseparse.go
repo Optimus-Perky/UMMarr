@@ -24,12 +24,20 @@ type FileQuality struct {
 	Resolution   string `json:"resolution,omitempty"` // "2160p"|"1080p"|"720p"|"480p"|""
 	Codec        string `json:"codec,omitempty"`      // "x265"|"x264"|"HEVC"|"AVC"|"AV1"|"XviD"|"DivX"|"VC-1"|"MPEG2"|""
 	ReleaseGroup string `json:"releaseGroup,omitempty"`
+	// Audio is set for music instead of Source/Resolution, which describe
+	// video and say nothing about a FLAC. Key() returns the audio catalog
+	// row when it is set, so everything downstream - profiles, weights,
+	// cutoffs - works the same for both.
+	Audio AudioQuality `json:"audio,omitempty"`
 }
 
 // String renders "Source-Resolution" (Radarr/Sonarr's own naming
 // convention, e.g. "Bluray-1080p"), just whichever half is known, or ""
 // if neither parsed.
 func (q FileQuality) String() string {
+	if !q.Audio.Empty() {
+		return q.Audio.String()
+	}
 	switch {
 	case q.Source != "" && q.Resolution != "":
 		return q.Source + "-" + q.Resolution

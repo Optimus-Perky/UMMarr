@@ -186,7 +186,7 @@ func (h *handler) ScanReportMatchApply(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	profileID, err := defaultQualityProfileID(ctx, h.deps.DB)
+	profileID, err := defaultQualityProfileID(ctx, h.deps.DB, row.Kind)
 	if err != nil {
 		renderInlineError(w, err.Error())
 		return
@@ -312,9 +312,10 @@ func (h *handler) unmatchedFromPath(w http.ResponseWriter, r *http.Request) (unm
 }
 
 // defaultQualityProfileID is the profile a matched folder is added with:
-// the one the Add forms preselect, or the first there is.
-func defaultQualityProfileID(ctx context.Context, db store.Queryer) (int64, error) {
-	profiles, err := store.ListQualityProfiles(ctx, db)
+// the one the Add forms preselect, or the first there is - of the kind
+// that media uses, so an artist is not added on a video profile.
+func defaultQualityProfileID(ctx context.Context, db store.Queryer, mediaType string) (int64, error) {
+	profiles, err := store.ListQualityProfilesOfKind(ctx, db, mediaType)
 	if err != nil {
 		return 0, err
 	}

@@ -907,6 +907,8 @@
 {{if eq .Tab "profiles"}}
 <div class="panel" data-section="quality-profiles">
   <div class="panel-head"><h2>Quality profiles</h2></div>
+  <p class="notice">Movies and TV are judged on resolution and source; music on format and bitrate. The two have separate profiles, built from their own list of qualities.</p>
+  <h3 style="margin:10px 0 4px">Movies and TV</h3>
   <table class="settings-table">
     {{range .QualityProfiles}}
     <tr><td><a href="/settings/quality-profiles/{{.ID}}">{{.Name}}</a> <span class="notice">(edit weights)</span></td><td style="text-align:right">{{if .IsDefault}}<span class="chip chip-good" title="Preselected when adding movies, series and artists">Default</span>{{else}}<button class="btn btn-sm btn-ghost" hx-post="/settings/quality-profiles/{{.ID}}/default" hx-target="body">Make default</button>{{end}} <button class="btn btn-sm btn-danger" hx-delete="/settings/quality-profiles/{{.ID}}" hx-target="#quality-profile-result" hx-swap="innerHTML" hx-confirm="Remove the quality profile {{.Name}}?" title="Only a profile nothing is using can be removed">Remove</button></td></tr>
@@ -914,10 +916,25 @@
     <tr><td colspan="2" class="notice">No quality profiles configured yet.</td></tr>
     {{end}}
   </table>
+  <form class="form-row" hx-post="/settings/quality-profiles" hx-target="body">
+    <input type="hidden" name="media_kind" value="video">
+    <input type="text" name="name" placeholder="e.g. HD-1080p" required>
+    <button class="btn btn-sm" type="submit">Add video profile</button>
+  </form>
+
+  <h3 style="margin:16px 0 4px">Music</h3>
+  <table class="settings-table">
+    {{range .AudioProfiles}}
+    <tr><td><a href="/settings/quality-profiles/{{.ID}}">{{.Name}}</a> <span class="notice">(edit weights)</span></td><td style="text-align:right">{{if .IsDefault}}<span class="chip chip-good" title="Preselected when adding artists">Default</span>{{else}}<button class="btn btn-sm btn-ghost" hx-post="/settings/quality-profiles/{{.ID}}/default" hx-target="body">Make default</button>{{end}} <button class="btn btn-sm btn-danger" hx-delete="/settings/quality-profiles/{{.ID}}" hx-target="#quality-profile-result" hx-swap="innerHTML" hx-confirm="Remove the quality profile {{.Name}}?" title="Only a profile nothing is using can be removed">Remove</button></td></tr>
+    {{else}}
+    <tr><td colspan="2" class="notice">No audio quality profiles yet.</td></tr>
+    {{end}}
+  </table>
   <div id="quality-profile-result"></div>
   <form class="form-row" hx-post="/settings/quality-profiles" hx-target="body">
-    <input type="text" name="name" placeholder="e.g. HD-1080p" required>
-    <button class="btn btn-sm" type="submit">Add quality profile</button>
+    <input type="hidden" name="media_kind" value="audio">
+    <input type="text" name="name" placeholder="e.g. Lossless" required>
+    <button class="btn btn-sm" type="submit">Add audio profile</button>
   </form>
 </div>
 

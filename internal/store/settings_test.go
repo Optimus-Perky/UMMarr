@@ -46,8 +46,37 @@ func TestCreateAndListQualityProfiles(t *testing.T) {
 	if err != nil {
 		t.Fatalf("list quality profiles: %v", err)
 	}
-	if len(profiles) != 2 {
-		t.Fatalf("want 2 quality profiles, got %d", len(profiles))
+	// The two created here, plus the audio profile migration 47 seeds so
+	// music has something to point at from the start.
+	var video, audio []store.QualityProfile
+	for _, p := range profiles {
+		if p.MediaKind == store.MediaKindAudio {
+			audio = append(audio, p)
+		} else {
+			video = append(video, p)
+		}
+	}
+	if len(video) != 2 {
+		t.Fatalf("want the 2 created video profiles, got %d of %d", len(video), len(profiles))
+	}
+	if len(audio) != 1 {
+		t.Fatalf("want the seeded audio profile, got %d", len(audio))
+	}
+	items, err := store.GetQualityProfileItems(ctx, db, audio[0].ID)
+	if err != nil {
+		t.Fatalf("audio profile items: %v", err)
+	}
+	if len(items) != len(releaseparse.AllAudioQualities) || items[0].Quality != "Unknown" {
+		t.Fatalf("want the audio profile built from the audio catalog, got %d rows starting %q", len(items), items[0].Quality)
+	}
+	var flac24 releaseparse.QualityProfileItem
+	for _, it := range items {
+		if it.Quality == "FLAC-24bit" {
+			flac24 = it
+		}
+	}
+	if !flac24.Allowed || flac24.Weight == 0 {
+		t.Errorf("want FLAC-24bit allowed and weighted, got %+v", flac24)
 	}
 }
 

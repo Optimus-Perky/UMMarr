@@ -88,7 +88,7 @@ func defaultImportList(implementation, mediaType string) store.ImportList {
 
 func (h *handler) importListFormData(ctx context.Context, l store.ImportList, isNew bool, errs map[string]string) importListFormData {
 	folders, _ := store.ListRootFolders(ctx, h.deps.DB, l.MediaType)
-	profiles, _ := store.ListQualityProfiles(ctx, h.deps.DB)
+	profiles, _ := store.ListQualityProfilesOfKind(ctx, h.deps.DB, l.MediaType)
 	return importListFormData{List: h.importListView(ctx, l), IsNew: isNew, Errors: errs, RootFolders: folders, QualityProfiles: profiles}
 }
 

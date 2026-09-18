@@ -34,10 +34,11 @@ const grabCoversEpisode = `(
 		OR (g.season_number IS NULL AND (e.air_date IS NULL OR date(e.air_date) <= date('now')))
 	)`
 
-// DefaultQualityProfileItems is the weight table a profile starts with: every
-// quality allowed, better qualities weighted higher.
-func DefaultQualityProfileItems() []releaseparse.QualityProfileItem {
-	return defaultQualityProfileItems()
+// DefaultQualityProfileItems is the weight table a profile of that kind
+// starts with: every quality in its catalog allowed, better qualities
+// weighted higher.
+func DefaultQualityProfileItems(mediaKind string) []releaseparse.QualityProfileItem {
+	return defaultQualityProfileItems(mediaKind)
 }
 
 // WantedMovie is a movie as release decisions see it.

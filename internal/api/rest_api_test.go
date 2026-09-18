@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -104,9 +105,18 @@ func TestRestAPI(t *testing.T) {
 	if status, _, _ := apiCall(t, srv, key, http.MethodPost, "/api/v3/command", map[string]any{"name": "Nonsense"}); status != http.StatusBadRequest {
 		t.Fatalf("want an unknown command refused, got %d", status)
 	}
+	// Both kinds are listed: the video profile the test made, and the audio
+	// one seeded for music.
 	status, _, profiles := apiCall(t, srv, key, http.MethodGet, "/api/v3/qualityprofile", nil)
-	if status != http.StatusOK || len(profiles) != 1 || profiles[0]["name"] != "Any" {
+	if status != http.StatusOK || len(profiles) != 2 {
 		t.Fatalf("profiles: %d %+v", status, profiles)
+	}
+	names := map[string]bool{}
+	for _, p := range profiles {
+		names[fmt.Sprint(p["name"])] = true
+	}
+	if !names["Any"] || !names["Any (audio)"] {
+		t.Fatalf("want both quality profiles listed, got %+v", names)
 	}
 	if status, _, _ := apiCall(t, srv, key, http.MethodDelete, "/api/v3/movie/"+itoa(id), nil); status != http.StatusNoContent {
 		t.Fatalf("delete: %d", status)

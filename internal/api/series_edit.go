@@ -46,7 +46,7 @@ func (h *handler) renderSeriesEdit(w http.ResponseWriter, r *http.Request, serie
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	profiles, _ := store.ListQualityProfiles(ctx, h.deps.DB)
+	profiles, _ := store.ListQualityProfilesOfKind(ctx, h.deps.DB, "series")
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	h.renderPartial(w, "series_edit", seriesEditData{Series: series, Settings: settings, Tags: strings.Join(settings.Tags, ", "), QualityProfiles: profiles, SeriesTypes: store.SeriesTypes, Error: errMsg})
 }

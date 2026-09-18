@@ -21,6 +21,9 @@ type QualityProfile struct {
 	ID        int64
 	Name      string
 	IsDefault bool // preselected by the Add forms
+	// MediaKind is "video" (movies and series) or "audio" (music), which
+	// decides the catalog of qualities the profile is built from.
+	MediaKind string
 	// UpgradeAllowed and Cutoff are Radarr's upgrade rule: a file below the
 	// cutoff quality is replaced by a better release. "" means the best
 	// allowed quality.
@@ -66,7 +69,7 @@ func CreateRootFolder(ctx context.Context, q Queryer, path, mediaType string) (i
 // media type in the schema (migration 00003), so every page's Add form
 // shares the same list.
 func ListQualityProfiles(ctx context.Context, q Queryer) ([]QualityProfile, error) {
-	rows, err := q.QueryContext(ctx, `SELECT id, name, is_default, upgrade_allowed, cutoff_quality FROM quality_profiles ORDER BY name`)
+	rows, err := q.QueryContext(ctx, `SELECT id, name, is_default, upgrade_allowed, cutoff_quality, media_kind FROM quality_profiles ORDER BY media_kind, name`)
 	if err != nil {
 		return nil, fmt.Errorf("list quality profiles: %w", err)
 	}
@@ -75,7 +78,7 @@ func ListQualityProfiles(ctx context.Context, q Queryer) ([]QualityProfile, erro
 	var profiles []QualityProfile
 	for rows.Next() {
 		var p QualityProfile
-		if err := rows.Scan(&p.ID, &p.Name, &p.IsDefault, &p.UpgradeAllowed, &p.Cutoff); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.IsDefault, &p.UpgradeAllowed, &p.Cutoff, &p.MediaKind); err != nil {
 			return nil, fmt.Errorf("scan quality profile: %w", err)
 		}
 		profiles = append(profiles, p)
@@ -89,11 +92,45 @@ func ListQualityProfiles(ctx context.Context, q Queryer) ([]QualityProfile, erro
 // entry allowed, weight = its index in releaseparse.AllQualities (higher
 // tiers default to higher weight).
 func CreateQualityProfile(ctx context.Context, q Queryer, name string) (int64, error) {
-	items, err := marshalJSON(defaultQualityProfileItems(), "[]")
+	return CreateQualityProfileOfKind(ctx, q, name, MediaKindVideo)
+}
+
+// MediaKindVideo profiles are built from the video catalog and belong to
+// movies and series; MediaKindAudio profiles from the audio catalog, and
+// belong to music.
+const (
+	MediaKindVideo = "video"
+	MediaKindAudio = "audio"
+)
+
+// QualityCatalog is the list of qualities a profile of this kind is built
+// from.
+func QualityCatalog(mediaKind string) []string {
+	if mediaKind == MediaKindAudio {
+		return releaseparse.AllAudioQualities
+	}
+	return releaseparse.AllQualities
+}
+
+// ProfileKindForMedia maps a media type to the profile kind it uses.
+func ProfileKindForMedia(mediaType string) string {
+	if mediaType == "music" {
+		return MediaKindAudio
+	}
+	return MediaKindVideo
+}
+
+// CreateQualityProfileOfKind adds a profile built from that kind's catalog.
+func CreateQualityProfileOfKind(ctx context.Context, q Queryer, name, mediaKind string) (int64, error) {
+	if mediaKind != MediaKindAudio {
+		mediaKind = MediaKindVideo
+	}
+	items, err := marshalJSON(defaultQualityProfileItems(mediaKind), "[]")
 	if err != nil {
 		return 0, fmt.Errorf("marshal default quality profile items: %w", err)
 	}
-	res, err := q.ExecContext(ctx, `INSERT INTO quality_profiles (name, items, is_default) VALUES (?, ?, NOT EXISTS (SELECT 1 FROM quality_profiles))`, name, items)
+	res, err := q.ExecContext(ctx, `INSERT INTO quality_profiles (name, items, media_kind, is_default)
+		VALUES (?, ?, ?, NOT EXISTS (SELECT 1 FROM quality_profiles WHERE media_kind = ?))`, name, items, mediaKind, mediaKind)
 	if err != nil {
 		return 0, fmt.Errorf("create quality profile: %w", err)
 	}
@@ -106,9 +143,10 @@ func CreateQualityProfile(ctx context.Context, q Queryer, name string) (int64, e
 
 // defaultQualityProfileItems seeds every releaseparse.AllQualities entry
 // as allowed, weighted by catalog order (worst=0, best=len-1).
-func defaultQualityProfileItems() []releaseparse.QualityProfileItem {
-	items := make([]releaseparse.QualityProfileItem, len(releaseparse.AllQualities))
-	for i, quality := range releaseparse.AllQualities {
+func defaultQualityProfileItems(mediaKind string) []releaseparse.QualityProfileItem {
+	catalog := QualityCatalog(mediaKind)
+	items := make([]releaseparse.QualityProfileItem, len(catalog))
+	for i, quality := range catalog {
 		items[i] = releaseparse.QualityProfileItem{Quality: quality, Weight: i, Allowed: true}
 	}
 	return items
@@ -121,8 +159,8 @@ func defaultQualityProfileItems() []releaseparse.QualityProfileItem {
 // grew a new entry), so a stale/partial saved list degrades safely
 // instead of erroring or omitting a row the UI needs to render.
 func GetQualityProfileItems(ctx context.Context, q Queryer, profileID int64) ([]releaseparse.QualityProfileItem, error) {
-	var raw string
-	if err := q.QueryRowContext(ctx, `SELECT items FROM quality_profiles WHERE id = ?`, profileID).Scan(&raw); err != nil {
+	var raw, mediaKind string
+	if err := q.QueryRowContext(ctx, `SELECT items, media_kind FROM quality_profiles WHERE id = ?`, profileID).Scan(&raw, &mediaKind); err != nil {
 		return nil, fmt.Errorf("get quality profile %d items: %w", profileID, err)
 	}
 	var saved []releaseparse.QualityProfileItem
@@ -132,8 +170,9 @@ func GetQualityProfileItems(ctx context.Context, q Queryer, profileID int64) ([]
 		savedByQuality[it.Quality] = it
 	}
 
-	items := make([]releaseparse.QualityProfileItem, len(releaseparse.AllQualities))
-	for i, quality := range releaseparse.AllQualities {
+	catalog := QualityCatalog(mediaKind)
+	items := make([]releaseparse.QualityProfileItem, len(catalog))
+	for i, quality := range catalog {
 		items[i] = releaseparse.QualityProfileItem{Quality: quality, Weight: savedByQuality[quality].Weight, Allowed: savedByQuality[quality].Allowed}
 	}
 	return items, nil
@@ -292,4 +331,22 @@ func plural(n int, noun string) string {
 		return noun
 	}
 	return noun + "s"
+}
+
+// ListQualityProfilesOfKind lists the profiles a media type can use, so a
+// music Add form doesn't offer Bluray-2160p and a movie form doesn't offer
+// FLAC. mediaType is "movie", "series" or "music".
+func ListQualityProfilesOfKind(ctx context.Context, q Queryer, mediaType string) ([]QualityProfile, error) {
+	all, err := ListQualityProfiles(ctx, q)
+	if err != nil {
+		return nil, err
+	}
+	kind := ProfileKindForMedia(mediaType)
+	var out []QualityProfile
+	for _, p := range all {
+		if p.MediaKind == kind {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }

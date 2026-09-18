@@ -18,7 +18,7 @@ func formatEngine(minScore, cutoffScore int) *Engine {
 		{ID: 1, Name: "x265", Conditions: []customformat.Condition{{Implementation: customformat.ReleaseTitle, Value: `x265|HEVC`}}},
 		{ID: 2, Name: "CAM", Conditions: []customformat.Condition{{Implementation: customformat.ReleaseTitle, Value: `\bCAM\b`}}},
 	}
-	e.Profiles = Profiles{1: {Items: store.DefaultQualityProfileItems(), UpgradeAllowed: true, Cutoff: "WEBDL-1080p",
+	e.Profiles = Profiles{1: {Items: store.DefaultQualityProfileItems(store.MediaKindVideo), UpgradeAllowed: true, Cutoff: "WEBDL-1080p",
 		FormatScores: map[int64]int{1: 25, 2: -1000}, MinFormatScore: minScore, CutoffFormatScore: cutoffScore}}
 	return e
 }

@@ -36,7 +36,7 @@ func (h *handler) Movies(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	qualityProfiles, err := store.ListQualityProfiles(ctx, h.deps.DB)
+	qualityProfiles, err := store.ListQualityProfilesOfKind(ctx, h.deps.DB, "movie")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -97,7 +97,7 @@ func (h *handler) MovieSearch(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	qualityProfiles, err := store.ListQualityProfiles(ctx, h.deps.DB)
+	qualityProfiles, err := store.ListQualityProfilesOfKind(ctx, h.deps.DB, "movie")
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

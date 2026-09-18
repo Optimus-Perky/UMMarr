@@ -68,7 +68,7 @@ func (h *handler) ArtistDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	data.Albums = albumViews
 	data.HasIndexer = h.deps.Indexer.Configured(ctx)
-	data.Profiles, _ = store.ListQualityProfiles(ctx, h.deps.DB)
+	data.Profiles, _ = store.ListQualityProfilesOfKind(ctx, h.deps.DB, "music")
 	data.RootFolders, _ = store.ListRootFolders(ctx, h.deps.DB, "music")
 	if n := r.URL.Query().Get("scanned"); n != "" {
 		data.Scanned = n
@@ -146,7 +146,7 @@ func (h *handler) ArtistEditForm(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	profiles, _ := store.ListQualityProfiles(r.Context(), h.deps.DB)
+	profiles, _ := store.ListQualityProfilesOfKind(r.Context(), h.deps.DB, "music")
 	roots, _ := store.ListRootFolders(r.Context(), h.deps.DB, "music")
 	h.renderPartial(w, "artist_edit", artistEditData{Artist: artist, Profiles: profiles, RootFolders: roots})
 }

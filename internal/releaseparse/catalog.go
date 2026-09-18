@@ -23,6 +23,9 @@ var AllQualities = []string{
 // "Unknown" as a safe fallback (e.g. "DVD-720p", which the catalog
 // doesn't model since DVD never comes in HD resolutions in practice).
 func (q FileQuality) Key() string {
+	if !q.Audio.Empty() {
+		return q.Audio.Key()
+	}
 	if q.Source == "SDTV" || (q.Source == "HDTV" && q.Resolution == "480p") {
 		return "SDTV" // standard definition TV, whatever the resolution tag
 	}

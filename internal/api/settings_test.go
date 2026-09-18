@@ -387,3 +387,60 @@ func mustProfiles(t *testing.T, db *sql.DB) []store.QualityProfile {
 	}
 	return profiles
 }
+
+// Music is judged on format and bitrate, movies and TV on resolution and
+// source, so the two have separate profiles built from separate catalogs.
+// A music Add form offering Bluray-2160p was the bug this fixes.
+func TestQualityProfiles_AudioAndVideoAreSeparate(t *testing.T) {
+	db := openTestDB(t)
+	srv := newTestServerWithDB(t, db)
+	ctx := t.Context()
+
+	// Settings lists both kinds, each with its own Add form.
+	_, body := get(t, srv, "/settings/profiles")
+	for _, want := range []string{">Movies and TV<", ">Music<", `value="video"`, `value="audio"`, "Add audio profile"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("want %q on the profiles page", want)
+		}
+	}
+
+	// Adding one of each puts it in the right catalog.
+	if resp, body := postForm(t, srv, "/settings/quality-profiles", url.Values{"name": {"Lossless"}, "media_kind": {"audio"}}); resp.StatusCode != 200 {
+		t.Fatalf("add audio profile = %d: %s", resp.StatusCode, body)
+	}
+	audio, err := store.ListQualityProfilesOfKind(ctx, db, "music")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var lossless store.QualityProfile
+	for _, p := range audio {
+		if p.Name == "Lossless" {
+			lossless = p
+		}
+	}
+	if lossless.ID == 0 {
+		t.Fatalf("want the audio profile created, got %+v", audio)
+	}
+	items, err := store.GetQualityProfileItems(ctx, db, lossless.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(items) != len(releaseparse.AllAudioQualities) {
+		t.Fatalf("want %d audio rows, got %d", len(releaseparse.AllAudioQualities), len(items))
+	}
+
+	// Its editor offers formats, not resolutions.
+	_, body = get(t, srv, "/settings/quality-profiles/"+itoa(lossless.ID))
+	if !strings.Contains(body, "FLAC-24bit") || !strings.Contains(body, "MP3-320") {
+		t.Errorf("want the audio catalog in the editor, got:\n%s", body)
+	}
+	if strings.Contains(body, "Bluray-1080p") {
+		t.Error("want no video qualities in an audio profile's editor")
+	}
+
+	// And the music Add form offers audio profiles only.
+	_, body = get(t, srv, "/music")
+	if strings.Contains(body, ">Any<") {
+		t.Error("want the video profile kept off the music page")
+	}
+}

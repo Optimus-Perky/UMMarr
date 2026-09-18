@@ -160,7 +160,7 @@ func (h *handler) AlbumEditForm(w http.ResponseWriter, r *http.Request) {
 		http.NotFound(w, r)
 		return
 	}
-	profiles, _ := store.ListQualityProfiles(r.Context(), h.deps.DB)
+	profiles, _ := store.ListQualityProfilesOfKind(r.Context(), h.deps.DB, "music")
 	h.renderPartial(w, "album_edit", albumEditData{Album: album, Profiles: profiles})
 }
 

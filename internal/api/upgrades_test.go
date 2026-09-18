@@ -15,7 +15,8 @@ func TestQualityProfile_Upgrades(t *testing.T) {
 	db := openTestDB(t)
 	srv := newTestServerWithDB(t, db)
 	movieID := seedTestMovie(t, db)
-	profiles, _ := store.ListQualityProfiles(t.Context(), db)
+	// The seeded audio profile exists too now, and a movie uses a video one.
+	profiles, _ := store.ListQualityProfilesOfKind(t.Context(), db, "movie")
 	profile := profiles[0]
 	fileID, err := store.InsertMovieFile(t.Context(), db, movieID, "Inception (2010).mkv", 5)
 	if err != nil {
@@ -50,7 +51,7 @@ func TestQualityProfile_Upgrades(t *testing.T) {
 	if resp, b := postForm(t, srv, "/settings/quality-profiles/"+itoa(profile.ID)+"/items", form); resp.StatusCode != 200 {
 		t.Fatalf("save profile: %d %s", resp.StatusCode, b)
 	}
-	profiles, _ = store.ListQualityProfiles(t.Context(), db)
+	profiles, _ = store.ListQualityProfilesOfKind(t.Context(), db, "movie")
 	if !profiles[0].UpgradeAllowed || profiles[0].Cutoff != "Bluray-1080p" {
 		t.Fatalf("want upgrades on until Bluray-1080p, got %+v", profiles[0])
 	}
@@ -67,7 +68,7 @@ func TestQualityProfile_UpgradesOff(t *testing.T) {
 	db := openTestDB(t)
 	srv := newTestServerWithDB(t, db)
 	movieID := seedTestMovie(t, db)
-	profiles, _ := store.ListQualityProfiles(t.Context(), db)
+	profiles, _ := store.ListQualityProfilesOfKind(t.Context(), db, "movie")
 	fileID, _ := store.InsertMovieFile(t.Context(), db, movieID, "Inception (2010).mkv", 5)
 	db.Exec(`UPDATE movie_files SET quality = '{"source":"HDTV","resolution":"720p"}' WHERE id = ?`, fileID)
 	form := url.Values{"cutoff": {""}}

@@ -781,10 +781,36 @@ func (s *ImportService) episodeFileQuality(ctx context.Context, episodeID int64,
 	})
 }
 
+// trackFileQuality reads what a music file actually is. The video catalog
+// has nothing to say about a FLAC, so this asks FFprobe for the format,
+// bit depth and bitrate and falls back to the release title only when the
+// file cannot be read.
 func (s *ImportService) trackFileQuality(ctx context.Context, trackID int64, fileName string) releaseparse.FileQuality {
-	return fileQuality(ctx, fileName, func(ctx context.Context) (string, bool, error) {
-		return store.ImportedReleaseTitleForTrack(ctx, s.DB, trackID)
-	})
+	quality := releaseparse.FileQuality{Audio: releaseparse.ParseAudio(fileName)}
+	if !quality.Audio.Empty() {
+		return quality
+	}
+	if title, ok, err := store.ImportedReleaseTitleForTrack(ctx, s.DB, trackID); err == nil && ok {
+		if fromRelease := releaseparse.ParseAudio(title); !fromRelease.Empty() {
+			return releaseparse.FileQuality{Audio: fromRelease}
+		}
+	}
+	return quality
+}
+
+// AudioQualityFromInfo turns what FFprobe read into an audio catalog
+// quality: the codec, whether it is 24-bit, and the bitrate for lossy
+// formats.
+func AudioQualityFromInfo(info mediainfo.Info) releaseparse.AudioQuality {
+	format := info.AudioFormat
+	if format == "" {
+		format = info.AudioCodec
+	}
+	quality := releaseparse.AudioQuality{Format: format, BitDepth: info.AudioBitsPerSample}
+	if info.AudioBitrate > 0 {
+		quality.Bitrate = int(info.AudioBitrate / 1000)
+	}
+	return quality
 }
 
 // backfillQualities fills in recorded qualities that say nothing, from the
