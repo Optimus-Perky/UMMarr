@@ -120,11 +120,45 @@ type searchResponse struct {
 
 // SearchRelease finds releases by artist and album title.
 func (c *Client) SearchRelease(ctx context.Context, artist, album string) ([]SearchResult, error) {
+	return c.Search(ctx, SearchQuery{Artist: artist, Album: album})
+}
+
+// SearchQuery narrows a release search. A popular album has hundreds of
+// pressings and Discogs returns them in no useful order, so asking for
+// the country and format the library's copy actually is beats sifting
+// through a page of whatever came back first.
+type SearchQuery struct {
+	Artist  string
+	Album   string
+	Country string
+	// Format is Discogs' own word for the medium: CD, Vinyl, Cassette,
+	// File.
+	Format string
+	Year   int
+	// PerPage defaults to 25; Discogs allows up to 100.
+	PerPage int
+}
+
+// Search runs a narrowed release search.
+func (c *Client) Search(ctx context.Context, q SearchQuery) ([]SearchResult, error) {
+	perPage := q.PerPage
+	if perPage <= 0 {
+		perPage = 25
+	}
 	query := url.Values{
 		"type":          {"release"},
-		"artist":        {artist},
-		"release_title": {album},
-		"per_page":      {"10"},
+		"artist":        {q.Artist},
+		"release_title": {q.Album},
+		"per_page":      {strconv.Itoa(perPage)},
+	}
+	if q.Country != "" {
+		query.Set("country", q.Country)
+	}
+	if q.Format != "" {
+		query.Set("format", q.Format)
+	}
+	if q.Year > 0 {
+		query.Set("year", strconv.Itoa(q.Year))
 	}
 	var out searchResponse
 	if err := c.get(ctx, "/database/search", query, &out); err != nil {

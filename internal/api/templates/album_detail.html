@@ -1,6 +1,9 @@
 {{define "content"}}
 {{$album := .Album}}
 <div class="page-toolbar" role="toolbar" aria-label="Album actions">
+  {{if $album.ArtistID.Valid}}<a class="tool" href="/music/artists/{{$album.ArtistID.Int64}}/albums" title="Up to {{$album.ArtistName}} and the rest of their albums">{{template "icon_up"}}<span>{{$album.ArtistName}}</span></a>
+  <span class="tool-sep"></span>
+  {{end}}
   <button class="tool" type="button" hx-post="/music/albums/{{$album.ID}}/refresh-metadata" hx-target="#album-metadata-result" hx-swap="innerHTML" hx-disabled-elt="this" title="Fetch the album from MusicBrainz again">{{template "icon_refresh"}}<span>Refresh metadata</span></button>
   {{if .HasIndexer}}
   <button class="tool" type="button" hx-post="/music/albums/{{$album.ID}}/search" hx-target="#search-report" hx-swap="innerHTML" title="Search and grab the best release UMMarr would accept">{{template "icon_search_big"}}<span>Search Album</span></button>

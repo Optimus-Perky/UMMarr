@@ -131,34 +131,8 @@ func SetCachedCover(ctx context.Context, q Queryer, albumID int64, file, source 
 }
 
 // AlbumsWithoutCover lists albums that have no artwork at all - neither a
-// file in their folder nor one fetched before - with what to search for.
-func AlbumsWithoutCover(ctx context.Context, q Queryer) ([]AlbumCoverCandidate, error) {
-	rows, err := q.QueryContext(ctx, `
-		SELECT al.id, am.name, al.title, COALESCE(CAST(strftime('%Y', al.release_date) AS INTEGER), 0)
-		FROM albums al JOIN artist_metadata am ON am.id = al.artist_metadata_id
-		WHERE al.cover_path IS NULL AND al.cover_cache IS NULL
-		  AND EXISTS (SELECT 1 FROM album_releases r JOIN tracks t ON t.album_release_id = r.id
-		              WHERE r.album_id = al.id AND t.track_file_id IS NOT NULL)
-		ORDER BY am.sort_name, al.title`)
-	if err != nil {
-		return nil, fmt.Errorf("list albums without cover: %w", err)
-	}
-	defer rows.Close()
-	var out []AlbumCoverCandidate
-	for rows.Next() {
-		var c AlbumCoverCandidate
-		if err := rows.Scan(&c.AlbumID, &c.Artist, &c.Album, &c.Year); err != nil {
-			return nil, err
-		}
-		out = append(out, c)
-	}
-	return out, rows.Err()
-}
-
-// AlbumCoverCandidate is an album with no artwork, and what to look for.
-type AlbumCoverCandidate struct {
-	AlbumID int64
-	Artist  string
-	Album   string
-	Year    int
+// file in their folder nor one fetched before - with what to search for
+// and which pressing to look for it on.
+func AlbumsWithoutCover(ctx context.Context, q Queryer) ([]AlbumEditionCandidate, error) {
+	return albumLookupCandidates(ctx, q, "al.cover_path IS NULL AND al.cover_cache IS NULL")
 }

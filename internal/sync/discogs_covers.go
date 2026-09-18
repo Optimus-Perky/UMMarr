@@ -98,17 +98,18 @@ func (f *CoverFetcher) FetchMissingCovers(ctx context.Context, limit int) (Cover
 	return report, nil
 }
 
-// findCover picks the Discogs release that best matches an album and
-// returns its front cover URL. A search hit already carries a cover image,
-// so a second call is only needed when it doesn't.
-func (f *CoverFetcher) findCover(ctx context.Context, c store.AlbumCoverCandidate) (string, error) {
-	results, err := f.Discogs.SearchRelease(ctx, c.Artist, c.Album)
-	if err != nil {
+// findCover returns the front cover of the release that best matches the
+// album, and "" when Discogs has nothing that is this album. A search hit
+// already carries a cover image, so a second call is only needed when it
+// doesn't.
+//
+// It picks the pressing the same way the edition lookup does, because a
+// cover is a picture of a particular sleeve: the Japanese CD and the 2009
+// remaster of the same album do not look alike.
+func (f *CoverFetcher) findCover(ctx context.Context, c store.AlbumEditionCandidate) (string, error) {
+	best, ok, err := f.findEdition(ctx, c)
+	if err != nil || !ok {
 		return "", err
-	}
-	best, ok := bestDiscogsMatch(results, c)
-	if !ok {
-		return "", nil
 	}
 	if best.CoverImage != "" && !strings.Contains(best.CoverImage, "spacer.gif") {
 		return best.CoverImage, nil
@@ -118,27 +119,6 @@ func (f *CoverFetcher) findCover(ctx context.Context, c store.AlbumCoverCandidat
 		return "", err
 	}
 	return release.FrontCover(), nil
-}
-
-// bestDiscogsMatch keeps the search honest: Discogs matches loosely, so a
-// hit whose title isn't this album is no match at all, and one from the
-// right year is preferred.
-func bestDiscogsMatch(results []discogs.SearchResult, c store.AlbumCoverCandidate) (discogs.SearchResult, bool) {
-	want := titleutil.CleanTitle(c.Artist + " " + c.Album)
-	var best discogs.SearchResult
-	found := false
-	for _, r := range results {
-		if titleutil.CleanTitle(r.Title) != want {
-			continue
-		}
-		if !found {
-			best, found = r, true
-		}
-		if c.Year > 0 && r.Year == strconv.Itoa(c.Year) {
-			return r, true
-		}
-	}
-	return best, found
 }
 
 // download saves the image beside the others, named for the album so a
@@ -212,15 +192,16 @@ func (r EditionReport) Summary() string {
 // original. MusicBrainz has the country and date; this is the detail it
 // doesn't carry.
 //
-// It matches the same way covers do: a Discogs hit whose title isn't this
-// album is no match, and the right year wins among several. A cover found
-// on the way is kept too, since the release has been fetched anyway.
+// The search is narrowed to the country and medium MusicBrainz already
+// settled on for the copy on disk, and what comes back is scored rather
+// than taken in order - see rankEdition. A cover found on the way is kept
+// too, since the release has been fetched anyway.
 func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int) (EditionReport, error) {
 	var report EditionReport
 	if f.Discogs == nil {
 		return report, fmt.Errorf("Discogs isn't configured")
 	}
-	candidates, err := store.AlbumsWithoutEdition(ctx, f.DB)
+	candidates, err := store.AlbumsWithoutEditionDetail(ctx, f.DB)
 	if err != nil {
 		return report, err
 	}
@@ -233,12 +214,11 @@ func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int) (EditionRep
 		}
 		report.Looked++
 
-		results, err := f.Discogs.SearchRelease(ctx, c.Artist, c.Album)
+		best, ok, err := f.findEdition(ctx, c)
 		if err != nil {
 			report.Failed++
 			continue
 		}
-		best, ok := bestDiscogsMatch(results, c)
 		if !ok {
 			report.NoMatch++
 			continue
@@ -282,4 +262,112 @@ func (f *CoverFetcher) cacheCoverIfMissing(ctx context.Context, albumID int64, r
 	if file, err := f.download(ctx, albumID, url); err == nil {
 		_ = store.SetCachedCover(ctx, f.DB, albumID, file, "discogs")
 	}
+}
+
+// findEdition picks the Discogs release that best matches the copy on
+// disk. Discogs' search ranking is not ours: asking it for "AC/DC" and
+// "Back in Black" returns a page of pressings in no order worth trusting,
+// which is how a Russian bootleg CD and an Australian cassette turned up
+// as the edition of a UK album. So the search is narrowed by what
+// MusicBrainz already decided - country first, then medium - and each
+// remaining hit is scored.
+func (f *CoverFetcher) findEdition(ctx context.Context, c store.AlbumEditionCandidate) (discogs.SearchResult, bool, error) {
+	// Narrowest first. Each fallback drops one constraint, because a
+	// filter Discogs has no hit for returns nothing at all rather than
+	// something close.
+	queries := []discogs.SearchQuery{{Country: c.Country, Format: c.Format}}
+	if c.Country != "" && c.Format != "" {
+		queries = append(queries, discogs.SearchQuery{Country: c.Country})
+	}
+	if c.Format != "" {
+		queries = append(queries, discogs.SearchQuery{Format: c.Format})
+	}
+	queries = append(queries, discogs.SearchQuery{})
+	for _, q := range queries {
+		q.Artist, q.Album, q.PerPage = c.Artist, c.Album, 50
+		results, err := f.Discogs.Search(ctx, q)
+		if err != nil {
+			return discogs.SearchResult{}, false, err
+		}
+		if best, ok := bestEdition(results, c); ok {
+			return best, true, nil
+		}
+	}
+	return discogs.SearchResult{}, false, nil
+}
+
+// bestEdition scores the hits and returns the highest, or false when none
+// of them is this album at all.
+func bestEdition(results []discogs.SearchResult, c store.AlbumEditionCandidate) (discogs.SearchResult, bool) {
+	want := titleutil.CleanTitle(c.Artist + " " + c.Album)
+	var best discogs.SearchResult
+	bestScore := 0
+	for _, r := range results {
+		if titleutil.CleanTitle(r.Title) != want {
+			continue
+		}
+		if score := rankEdition(r, c); score > bestScore {
+			best, bestScore = r, score
+		}
+	}
+	return best, bestScore > 0
+}
+
+// rankEdition scores one hit. Every release that is genuinely this album
+// scores at least 1, so a single poor match still beats nothing; the
+// weights below only decide between them.
+func rankEdition(r discogs.SearchResult, c store.AlbumEditionCandidate) int {
+	score := 1
+	// Country, in the order the user asked for: the release MusicBrainz
+	// chose, then home, then the US, which is where most of the rest of
+	// the catalogue is pressed.
+	switch {
+	case c.Country != "" && strings.EqualFold(r.Country, c.Country):
+		score += 40
+	case strings.EqualFold(r.Country, "UK"), strings.EqualFold(r.Country, "GB"):
+		score += 25
+	case strings.EqualFold(r.Country, "US"):
+		score += 15
+	case strings.EqualFold(r.Country, "Europe"), strings.EqualFold(r.Country, "UK & Europe"):
+		score += 12
+	}
+	// Medium. A rip of a CD described as a cassette is wrong even when
+	// every other detail lines up.
+	if c.Format != "" && hasFormat(r.Format, c.Format) {
+		score += 30
+	}
+	// Year, from the chosen release first and the album's own date as a
+	// fallback: a remaster and its original differ by little else.
+	if year, err := strconv.Atoi(r.Year); err == nil && year > 0 {
+		switch {
+		case c.ReleaseYear > 0 && year == c.ReleaseYear:
+			score += 20
+		case c.Year > 0 && year == c.Year:
+			score += 10
+		}
+	}
+	// Discogs marks what isn't a proper commercial release in the format
+	// list. None of it belongs in a library's edition line.
+	for _, f := range r.Format {
+		switch strings.ToLower(f) {
+		case "unofficial release", "promo", "test pressing", "transcription", "mispress":
+			score -= 35
+		case "album":
+			score += 5
+		}
+	}
+	if score < 1 {
+		score = 1
+	}
+	return score
+}
+
+// hasFormat reports whether a hit's format list mentions this medium.
+func hasFormat(formats []string, want string) bool {
+	for _, f := range formats {
+		if strings.EqualFold(f, want) {
+			return true
+		}
+	}
+	return false
 }
