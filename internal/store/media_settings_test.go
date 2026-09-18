@@ -29,6 +29,10 @@ func TestGetMediaSettings_DefaultsKeepTodaysBehaviour(t *testing.T) {
 		AnalyzeAudioFiles:     true,
 		RescanAfterRefresh:    store.RescanAlways,
 		RecycleBinCleanupDays: 7,
+		// Not a behaviour switch: it only orders which pressing of an album
+		// is chosen when MusicBrainz lists several, and something has to be
+		// preferred. See migration 00046.
+		PreferredReleaseCountries: "GB,US",
 	}
 	if got != want {
 		t.Fatalf("defaults:\n got %+v\nwant %+v", got, want)
