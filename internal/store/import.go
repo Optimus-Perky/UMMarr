@@ -310,7 +310,7 @@ func FindImportRelease(ctx context.Context, q Queryer, albumID int64) (releaseID
 		       COALESCE(t.musicbrainz_id, '')
 		FROM tracks t
 		WHERE t.album_release_id = ?
-		ORDER BY t.medium_number ASC, t.track_number ASC
+		ORDER BY t.medium_number ASC, CAST(t.track_number AS INTEGER) ASC, t.track_number ASC
 `, releaseID)
 	if err != nil {
 		return 0, nil, fmt.Errorf("list tracks for release %d: %w", releaseID, err)

@@ -241,3 +241,39 @@ func TestListAlbums_CompilationSeriesName(t *testing.T) {
 		t.Fatalf("want sequence number 50, got %+v", albums[0].CompilationSeqNumber)
 	}
 }
+
+// track_number is TEXT, because MusicBrainz numbers can be "A1" on a vinyl.
+// Ordering it as text puts track 10 between 1 and 2, and positional matching
+// then attached every file after the first to the wrong track - which is
+// what a real library turned out to be full of.
+func TestFindImportRelease_OrdersTracksNumerically(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	albumID, artistID := seedAlbumForRelease(t, db)
+	releaseID, err := store.UpsertAlbumRelease(ctx, db, albumID, metadata.ReleaseMetadata{
+		Title: metadata.Field[string]{Value: "Homework", Provider: "musicbrainz"}, ExternalIDs: map[string]string{"musicbrainz": "hw-order"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range []string{"1", "2", "3", "10", "11", "12"} {
+		if _, err := store.UpsertTrack(ctx, db, releaseID, artistID, metadata.TrackSource{
+			Number: n, Title: "Track " + n, MediumNumber: 1}); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	_, tracks, err := store.FindImportRelease(ctx, db, albumID)
+	if err != nil {
+		t.Fatalf("find import release: %v", err)
+	}
+	var got []string
+	for _, tr := range tracks {
+		got = append(got, tr.Number)
+	}
+	want := []string{"1", "2", "3", "10", "11", "12"}
+	for i := range want {
+		if i >= len(got) || got[i] != want[i] {
+			t.Fatalf("track order = %v, want %v", got, want)
+		}
+	}
+}

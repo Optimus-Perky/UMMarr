@@ -617,7 +617,7 @@ func ListTracksForAlbum(ctx context.Context, q Queryer, albumID int64) ([]TrackD
 		FROM tracks t
 		LEFT JOIN track_files tf ON tf.id = t.track_file_id
 		WHERE t.album_release_id = ?
-		ORDER BY t.medium_number ASC, t.track_number ASC
+		ORDER BY t.medium_number ASC, CAST(t.track_number AS INTEGER) ASC, t.track_number ASC
 	`, releaseID)
 	if err != nil {
 		return nil, fmt.Errorf("list tracks for release %d: %w", releaseID, err)
