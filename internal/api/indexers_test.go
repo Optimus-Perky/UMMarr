@@ -20,6 +20,21 @@ func postForm(t *testing.T, srv *httptest.Server, path string, values url.Values
 	return resp, readBody(t, resp)
 }
 
+// deleteForm is postForm for the DELETE the htmx hx-delete buttons send.
+func deleteForm(t *testing.T, srv *httptest.Server, path string, values url.Values) (*http.Response, string) {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+path, strings.NewReader(values.Encode()))
+	if err != nil {
+		t.Fatalf("DELETE %s: %v", path, err)
+	}
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		t.Fatalf("DELETE %s: %v", path, err)
+	}
+	return resp, readBody(t, resp)
+}
+
 func validIndexerForm() url.Values {
 	return url.Values{
 		"implementation": {"Torznab"}, "name": {"IPTorrents"},

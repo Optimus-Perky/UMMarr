@@ -71,12 +71,15 @@ func ratingPercent(ratings []ratingView) string {
 	return ""
 }
 
+// renamePreviewData is the Organize & Rename dialog for any media type:
+// Action is where the form posts, Root is the folder the listed paths are
+// relative to.
 type renamePreviewData struct {
-	SeriesID   int64
-	SeriesPath string
-	Pattern    string
-	Items      []sync.RenameItem
-	Err        string
+	Action  string
+	Root    string
+	Pattern string
+	Items   []sync.RenameItem
+	Err     string
 }
 
 // SeriesRenamePreview is Sonarr's Organize & Rename: what would change.
@@ -85,7 +88,7 @@ func (h *handler) SeriesRenamePreview(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	data := renamePreviewData{SeriesID: seriesID}
+	data := renamePreviewData{Action: fmt.Sprintf("/tv/%d/rename", seriesID)}
 	naming, err := store.GetNamingConfig(r.Context(), h.deps.DB, "series")
 	if err == nil {
 		data.Pattern = strings.TrimSuffix(naming.SeasonFolderFormat.String, "/") + "/" + naming.EpisodeFileFormat.String
@@ -94,7 +97,7 @@ func (h *handler) SeriesRenamePreview(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		data.Err = err.Error()
 	}
-	data.SeriesPath, data.Items = path, items
+	data.Root, data.Items = path, items
 	h.renderPartial(w, "rename_preview", data)
 }
 

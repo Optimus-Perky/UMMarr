@@ -695,3 +695,13 @@ func DeleteAlbum(ctx context.Context, q Queryer, albumID int64) error {
 	}
 	return nil
 }
+
+// UpdateTrackFilePath records a track file's new name after an organize.
+// The path is relative to its album's folder, as ListTrackFilesForAlbum
+// returns it.
+func UpdateTrackFilePath(ctx context.Context, q Queryer, fileID int64, relativePath string) error {
+	if _, err := q.ExecContext(ctx, `UPDATE track_files SET relative_path = ? WHERE id = ?`, relativePath, fileID); err != nil {
+		return fmt.Errorf("update track_file %d path: %w", fileID, err)
+	}
+	return nil
+}

@@ -64,3 +64,84 @@
   </div>
 </form>
 {{end}}
+
+{{define "artist_monitor"}}
+{{$a := .Artist}}
+<form hx-post="/music/artists/{{$a.ID}}/monitor" hx-target="#artist-monitor-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Album Monitoring - {{$a.Name}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body mm-form">
+    <p class="notice">Sets which of this artist's albums are monitored, the way Lidarr's Monitor dropdown does. The artist's own monitored switch isn't changed.</p>
+    <div class="setting-row">
+      <div class="setting-label">Monitor</div>
+      <div class="setting-control">
+        <select name="monitor">{{range .Options}}<option value="{{.Value}}" title="{{.Help}}">{{.Label}}</option>{{end}}</select>
+        <span class="setting-help">An album with no release date counts as unreleased, so Future and Missing both keep watching it.</span>
+      </div>
+    </div>
+    <div id="artist-monitor-result"></div>
+  </div>
+  <div class="dialog-foot">
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}
+
+{{define "album_edit"}}
+{{$al := .Album}}
+<form hx-post="/music/albums/{{$al.ID}}/edit" hx-target="#album-edit-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Edit - {{$al.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body mm-form">
+    <div class="setting-row">
+      <div class="setting-label">Monitored</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="monitored"{{if $al.Monitored}} checked{{end}}> Search for this album when it's missing</label>
+      </div>
+    </div>
+    <div class="setting-row">
+      <div class="setting-label">Quality Profile</div>
+      <div class="setting-control">
+        <span class="setting-help">Albums follow their artist's quality profile{{if .Album.QualityProfileName.String}} ({{.Album.QualityProfileName.String}}){{end}} - change it on the artist.</span>
+      </div>
+    </div>
+    <div id="album-edit-result"></div>
+  </div>
+  <div class="dialog-foot">
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm" type="submit">Save</button>
+  </div>
+</form>
+{{end}}
+
+{{define "album_delete"}}
+<form hx-delete="/music/albums/{{.ID}}" hx-target="#album-delete-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Delete - {{.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body mm-form">
+    <p class="notice">Removes the album from UMMarr. Its artist stays.</p>
+    <div class="setting-row">
+      <div class="setting-label">Delete Files</div>
+      <div class="setting-control">
+        <label class="setting-check"><input type="checkbox" name="delete_files"> Delete the album's folder and everything in it</label>
+        <span class="setting-help">A folder is only removed when it sits inside a library folder. Nothing goes to the recycle bin.</span>
+      </div>
+    </div>
+    <div id="album-delete-result"></div>
+  </div>
+  <div class="dialog-foot">
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    <button class="btn btn-sm btn-danger" type="submit">Delete</button>
+  </div>
+</form>
+{{end}}

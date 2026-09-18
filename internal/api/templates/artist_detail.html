@@ -10,6 +10,8 @@
   <button class="tool" type="button" hx-get="/music/artists/{{$a.ID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this artist at the right MusicBrainz entry">{{template "icon_target"}}<span>Fix Match</span></button>
   <a class="tool" href="/history?media=music" title="Everything that happened in the music library">{{template "icon_history"}}<span>History</span></a>
   <span class="tool-sep"></span>
+  <button class="tool" type="button" hx-get="/music/artists/{{$a.ID}}/monitor" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Choose which of this artist's albums are monitored">{{template "icon_file_edit"}}<span>Album Monitoring</span></button>
+  <button class="tool" type="button" hx-get="/music/artists/{{$a.ID}}/rename-preview" hx-target="#release-dialog-body" hx-swap="innerHTML" title="See which track files don't match the naming templates, and rename them">{{template "icon_wrench"}}<span>Preview Rename</span></button>
   <button class="tool" type="button" hx-get="/music/artists/{{$a.ID}}/edit" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Monitoring, quality profile and path">{{template "icon_wrench"}}<span>Edit</span></button>
   <button class="tool tool-danger" type="button" hx-get="/music/artists/{{$a.ID}}/delete" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Remove the artist, optionally with its files">{{template "icon_trash"}}<span>Delete</span></button>
 </div>

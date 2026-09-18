@@ -1,5 +1,20 @@
 {{define "content"}}
 {{$album := .Album}}
+<div class="page-toolbar" role="toolbar" aria-label="Album actions">
+  <button class="tool" type="button" hx-post="/music/albums/{{$album.ID}}/refresh-metadata" hx-target="#album-metadata-result" hx-swap="innerHTML" hx-disabled-elt="this" title="Fetch the album from MusicBrainz again">{{template "icon_refresh"}}<span>Refresh metadata</span></button>
+  {{if .HasIndexer}}
+  <button class="tool" type="button" hx-post="/music/albums/{{$album.ID}}/search" hx-target="#search-report" hx-swap="innerHTML" title="Search and grab the best release UMMarr would accept">{{template "icon_search_big"}}<span>Search Album</span></button>
+  {{end}}
+  <span class="tool-sep"></span>
+  <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/metadata" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Where the details came from, and pick the cover">{{template "icon_refresh"}}<span>Metadata</span></button>
+  <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this album at the right MusicBrainz release group">{{template "icon_target"}}<span>Fix Match</span></button>
+  <a class="tool" href="/history?media=music" title="Everything that happened in the music library">{{template "icon_history"}}<span>History</span></a>
+  <span class="tool-sep"></span>
+  <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/rename-preview" hx-target="#release-dialog-body" hx-swap="innerHTML" title="See which track files don't match the naming templates, and rename them">{{template "icon_wrench"}}<span>Preview Rename</span></button>
+  <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/edit" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Monitoring">{{template "icon_wrench"}}<span>Edit</span></button>
+  <button class="tool tool-danger" type="button" hx-get="/music/albums/{{$album.ID}}/delete" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Remove the album, optionally with its files">{{template "icon_trash"}}<span>Delete</span></button>
+</div>
+
 <div class="detail-head">
   {{if $album.PosterURL}}<div class="detail-poster" style="background-image:url('{{$album.PosterURL}}')"></div>
   {{else}}<div class="detail-poster"></div>{{end}}
@@ -20,10 +35,9 @@
       {{if $album.Genres}}<div class="field"><span class="label">Genres</span>{{range $i, $g := $album.Genres}}{{if $i}}, {{end}}{{$g}}{{end}}</div>{{end}}
     </div>
     {{if $album.Overview.String}}<p class="detail-overview">{{$album.Overview.String}}</p>{{end}}
-    <div class="detail-actions"><button class="btn btn-sm btn-ghost" hx-post="/music/albums/{{$album.ID}}/refresh-metadata" hx-target="#album-metadata-result" hx-swap="innerHTML" hx-disabled-elt="this" title="Fetch the album from MusicBrainz again">Refresh metadata</button><button class="btn btn-sm btn-ghost" hx-get="/music/albums/{{$album.ID}}/metadata" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Where the details came from">Metadata</button><button class="btn btn-sm btn-ghost" hx-get="/music/albums/{{$album.ID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this album at the right MusicBrainz release group">Fix match</button><span id="album-metadata-result"></span></div>
+    <div class="detail-actions"><span id="album-metadata-result"></span></div>
     {{if .HasIndexer}}
     <button class="btn btn-sm" style="margin-top:12px" hx-get="/music/albums/{{$album.ID}}/releases" hx-target="#release-dialog-body" hx-swap="innerHTML">Find release</button>
-    <button class="btn btn-sm btn-ghost" style="margin-top:12px" hx-post="/music/albums/{{$album.ID}}/search" hx-target="#search-report" hx-swap="innerHTML" title="Search and grab the best release UMMarr would accept">Search Album</button>
     <div id="search-report"></div>
     {{end}}
   </div>

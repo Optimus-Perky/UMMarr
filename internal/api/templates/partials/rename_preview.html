@@ -1,12 +1,12 @@
 {{define "rename_preview"}}
-<form class="rename-form" hx-post="/tv/{{.SeriesID}}/rename" hx-target="#rename-result" hx-swap="innerHTML">
+<form class="rename-form" hx-post="{{.Action}}" hx-target="#rename-result" hx-swap="innerHTML">
   <div class="guide-head">
     <h2>Organize &amp; Rename</h2>
     <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
   </div>
   <div class="guide-body">
     <div class="rename-info">
-      <div>All paths are relative to: <code>{{.SeriesPath}}</code></div>
+      <div>All paths are relative to: <code>{{.Root}}</code></div>
       <div>Naming pattern: <code>{{.Pattern}}</code></div>
     </div>
     {{if .Err}}<p class="indexer-test failed">{{.Err}}</p>
