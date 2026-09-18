@@ -226,6 +226,7 @@ silently missing regardless of what MusicBrainz actually returned.
 go run ./cmd/ummarr migrate --db ummarr.db   # apply pending migrations only
 go run ./cmd/ummarr serve --db ummarr.db     # run the web UI (default :8080)
 go run ./cmd/ummarr episode-names --db ummarr.db "MobLand"   # one task, no UI
+go run ./cmd/ummarr rename-preview --db ummarr.db            # what Organize would change
 ```
 
 `migrate` applies any pending migrations to the given SQLite file (created

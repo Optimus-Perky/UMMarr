@@ -117,6 +117,68 @@ func main() {
 	episodeNames.Flags().IntVar(&episodeNamesSeason, "season", -1, "only this season number (default: every season)")
 	root.AddCommand(episodeNames)
 
+	// Read-only on purpose: it prints what Organize & Rename WOULD do and
+	// never touches a file. Renaming stays in the web UI, where each file
+	// has a tick box.
+	var renameAll bool
+	renamePreview := &cobra.Command{
+		Use:   "rename-preview [artist name]",
+		Short: "Show which music files don't match the naming templates (changes nothing)",
+		Long: "Lists every track file whose location doesn't match the album folder and\n" +
+			"track file templates, artist by artist. With no argument it covers the whole\n" +
+			"music library. Nothing is renamed - use Preview Rename in the web UI for that.",
+		Args: cobra.MaximumNArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := store.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			ctx := cmd.Context()
+			svc := &sync.ImportService{DB: db}
+
+			artists, err := store.ListArtists(ctx, db)
+			if err != nil {
+				return err
+			}
+			totalFiles, totalArtists, failed := 0, 0, 0
+			for _, artist := range artists {
+				if len(args) > 0 && !strings.Contains(strings.ToLower(artist.Name), strings.ToLower(args[0])) {
+					continue
+				}
+				root, items, err := svc.ArtistRenamePreview(ctx, artist.ID)
+				if err != nil {
+					fmt.Printf("%s: %v\n", artist.Name, err)
+					failed++
+					continue
+				}
+				if len(items) == 0 {
+					continue
+				}
+				totalArtists++
+				totalFiles += len(items)
+				fmt.Printf("\n%s (%d file(s)) under %s\n", artist.Name, len(items), root)
+				show := items
+				if !renameAll && len(show) > 3 {
+					show = show[:3]
+				}
+				for _, item := range show {
+					fmt.Printf("  - %s\n  + %s\n", item.Current, item.New)
+				}
+				if len(show) < len(items) {
+					fmt.Printf("  ... and %d more (--all to list them)\n", len(items)-len(show))
+				}
+			}
+			fmt.Printf("\n%d file(s) across %d artist(s) don't match the templates.\n", totalFiles, totalArtists)
+			if failed > 0 {
+				fmt.Printf("%d artist(s) couldn't be read - see above.\n", failed)
+			}
+			return nil
+		},
+	}
+	renamePreview.Flags().BoolVar(&renameAll, "all", false, "list every file rather than three per artist")
+	root.AddCommand(renamePreview)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "serve",
 		Short: "Run the UMMarr web UI and API",
