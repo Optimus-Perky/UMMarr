@@ -71,7 +71,14 @@ func New(opts Options) (*Client, error) {
 			// Spread requests out rather than bursting the whole minute's
 			// allowance: a burst is what gets a client throttled.
 			Limiter:    rate.NewLimiter(rate.Every(time.Minute/time.Duration(perMinute)), 2),
-			MaxRetries: 2,
+			MaxRetries: 3,
+			// The quota is a rolling minute and Discogs sends no
+			// Retry-After, so a 429 is waited out in steps of twenty
+			// seconds rather than the default fraction of one. It also
+			// counts per account and per address, so UMMarr can be over
+			// the limit through no fault of its own pacing - a scheduled
+			// task and a command line run at once, say.
+			MinRetryWait: 20 * time.Second,
 		},
 	}, nil
 }

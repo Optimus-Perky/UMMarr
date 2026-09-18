@@ -43,12 +43,20 @@ type CoverReport struct {
 	Fetched int
 	NoMatch int
 	Failed  int
+	// LastError is why the most recent failure failed. A run that fails
+	// eighty times usually fails eighty times for one reason, and a bare
+	// count of them says nothing about what to do next.
+	LastError string
 }
 
 // Summary is the report in one line.
 func (r CoverReport) Summary() string {
-	return fmt.Sprintf("%d album(s) without artwork: %d fetched, %d had no match on Discogs, %d failed.",
+	out := fmt.Sprintf("%d album(s) without artwork: %d fetched, %d had no match on Discogs, %d failed.",
 		r.Looked, r.Fetched, r.NoMatch, r.Failed)
+	if r.LastError != "" {
+		out += " Last failure: " + r.LastError
+	}
+	return out
 }
 
 // FetchMissingCovers looks up every album with no artwork and caches the
@@ -77,7 +85,7 @@ func (f *CoverFetcher) FetchMissingCovers(ctx context.Context, limit int) (Cover
 		report.Looked++
 		url, err := f.findCover(ctx, c)
 		if err != nil {
-			report.Failed++
+			report.Failed, report.LastError = report.Failed+1, err.Error()
 			continue
 		}
 		if url == "" {
@@ -86,11 +94,11 @@ func (f *CoverFetcher) FetchMissingCovers(ctx context.Context, limit int) (Cover
 		}
 		file, err := f.download(ctx, c.AlbumID, url)
 		if err != nil {
-			report.Failed++
+			report.Failed, report.LastError = report.Failed+1, err.Error()
 			continue
 		}
 		if err := store.SetCachedCover(ctx, f.DB, c.AlbumID, file, "discogs"); err != nil {
-			report.Failed++
+			report.Failed, report.LastError = report.Failed+1, err.Error()
 			continue
 		}
 		report.Fetched++
@@ -175,16 +183,21 @@ func DiscogsFromSettings(ctx context.Context, db *sql.DB, userAgent string) *dis
 
 // EditionReport is what an edition-detail run did.
 type EditionReport struct {
-	Looked  int
-	Filled  int
-	NoMatch int
-	Failed  int
+	Looked    int
+	Filled    int
+	NoMatch   int
+	Failed    int
+	LastError string
 }
 
 // Summary is the report in one line.
 func (r EditionReport) Summary() string {
-	return fmt.Sprintf("%d album(s) without edition detail: %d filled in, %d had no match on Discogs, %d failed.",
+	out := fmt.Sprintf("%d album(s) without edition detail: %d filled in, %d had no match on Discogs, %d failed.",
 		r.Looked, r.Filled, r.NoMatch, r.Failed)
+	if r.LastError != "" {
+		out += " Last failure: " + r.LastError
+	}
+	return out
 }
 
 // FetchEditions fills in what pressing each album is - the label,
@@ -220,7 +233,7 @@ func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int, refresh boo
 
 		best, ok, err := f.findEdition(ctx, c)
 		if err != nil {
-			report.Failed++
+			report.Failed, report.LastError = report.Failed+1, err.Error()
 			continue
 		}
 		if !ok {
@@ -229,7 +242,7 @@ func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int, refresh boo
 		}
 		release, err := f.Discogs.GetRelease(ctx, best.ID)
 		if err != nil {
-			report.Failed++
+			report.Failed, report.LastError = report.Failed+1, err.Error()
 			continue
 		}
 		label, catalogue := release.FirstLabel()
@@ -238,7 +251,7 @@ func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int, refresh boo
 			Country: release.Country, Year: release.Year, DiscogsReleaseID: int64(release.ID),
 		}
 		if err := store.SetAlbumEdition(ctx, f.DB, c.AlbumID, edition); err != nil {
-			report.Failed++
+			report.Failed, report.LastError = report.Failed+1, err.Error()
 			continue
 		}
 		report.Filled++

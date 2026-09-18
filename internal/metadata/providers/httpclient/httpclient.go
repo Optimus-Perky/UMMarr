@@ -27,6 +27,12 @@ type Client struct {
 	UserAgent  string
 	Limiter    *rate.Limiter
 	MaxRetries int
+	// MinRetryWait is the shortest a 429 is worth waiting out. The default
+	// backoff is sub-second, which suits a server shedding a burst and is
+	// useless against an API with a per-minute quota: every quick retry
+	// lands in the same exhausted window and burns an attempt. A provider
+	// with a quota sets this to something on the order of its window.
+	MinRetryWait time.Duration
 }
 
 // StatusError is returned for any non-2xx response, so callers can
@@ -95,7 +101,7 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values, headers
 			if attempt == c.MaxRetries {
 				break
 			}
-			if err := sleepBackoff(ctx, resp.Header.Get("Retry-After"), attempt); err != nil {
+			if err := sleepBackoff(ctx, resp.Header.Get("Retry-After"), attempt, c.MinRetryWait); err != nil {
 				return nil, err
 			}
 			continue
@@ -111,14 +117,27 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values, headers
 	return nil, lastErr
 }
 
-func sleepBackoff(ctx context.Context, retryAfter string, attempt int) error {
+// retryWait is how long to hold off before retrying, kept apart from the
+// sleeping so it can be checked without one.
+func retryWait(retryAfter string, attempt int, minWait time.Duration) time.Duration {
 	wait := backoffDuration(attempt)
+	if minWait > 0 {
+		// Each attempt waits a little longer, so a quota that resets on a
+		// rolling window is crossed rather than repeatedly missed.
+		if stepped := time.Duration(attempt+1) * minWait; stepped > wait {
+			wait = stepped
+		}
+	}
 	if retryAfter != "" {
 		if secs, err := strconv.Atoi(retryAfter); err == nil {
 			wait = time.Duration(secs) * time.Second
 		}
 	}
-	timer := time.NewTimer(wait)
+	return wait
+}
+
+func sleepBackoff(ctx context.Context, retryAfter string, attempt int, minWait time.Duration) error {
+	timer := time.NewTimer(retryWait(retryAfter, attempt, minWait))
 	defer timer.Stop()
 	select {
 	case <-ctx.Done():
