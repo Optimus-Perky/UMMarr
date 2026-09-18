@@ -24,6 +24,21 @@
       {{end}}
     </ul>
     {{end}}
+    {{if .Skipped}}
+    <div class="rename-info" style="margin-top:14px">
+      <div><strong>Left alone</strong> - these files sit in a folder inside the album folder, which the naming templates can't describe. They're usually a disc or a second edition, and moving them up would put two recordings of the same track on one path, so nothing here is touched.</div>
+    </div>
+    <ul class="rename-list">
+      {{range .Skipped}}
+      <li>
+        <div class="rename-paths">
+          <div class="rename-old">{{.Folder}} <span class="card-sub">- {{.Files}} file(s)</span></div>
+          <div class="rename-new"><a href="/music/albums/{{.AlbumID}}">Open {{.Album}}</a> to re-match these files, or add the edition as its own album from the artist page.</div>
+        </div>
+      </li>
+      {{end}}
+    </ul>
+    {{end}}
     <div id="rename-result"></div>
   </div>
   <div class="dialog-foot">

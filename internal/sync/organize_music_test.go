@@ -51,7 +51,7 @@ func TestArtistRenamePreview_ListsOnlyMisnamedFiles(t *testing.T) {
 	ctx := context.Background()
 
 	// Files land already named by the templates, so nothing to organize.
-	_, items, err := svc.ArtistRenamePreview(ctx, artistID)
+	_, items, _, err := svc.ArtistRenamePreview(ctx, artistID)
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestArtistRenamePreview_ListsOnlyMisnamedFiles(t *testing.T) {
 		t.Fatalf("record wrong name: %v", err)
 	}
 
-	_, items, err = svc.ArtistRenamePreview(ctx, artistID)
+	_, items, _, err = svc.ArtistRenamePreview(ctx, artistID)
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestRenameAlbumFiles_MovesTheAlbumFolderAndRecordsIt(t *testing.T) {
 		t.Fatalf("retitle: %v", err)
 	}
 
-	_, items, err := svc.AlbumRenamePreview(ctx, albumID)
+	_, items, _, err := svc.AlbumRenamePreview(ctx, albumID)
 	if err != nil {
 		t.Fatalf("preview: %v", err)
 	}
@@ -162,7 +162,7 @@ func TestRenameAlbumFiles_MovesTheAlbumFolderAndRecordsIt(t *testing.T) {
 		}
 	}
 	// And the artist preview is clean again afterwards.
-	if _, items, err := svc.ArtistRenamePreview(ctx, artistID); err != nil || len(items) != 0 {
+	if _, items, _, err := svc.ArtistRenamePreview(ctx, artistID); err != nil || len(items) != 0 {
 		t.Errorf("want nothing left to organize, got %+v (%v)", items, err)
 	}
 	_ = artistPath
@@ -175,4 +175,91 @@ func mustAlbumOf(t *testing.T, db *sql.DB, artistID int64) int64 {
 		t.Fatalf("find album: %v", err)
 	}
 	return albumID
+}
+
+// The rule Mark set after seeing the first preview: two editions of one
+// album (a vinyl rip and a download card, say) each keep their own file.
+// A subfolder the templates can't describe is left alone and reported for
+// re-matching, and even if something did aim two files at one name, the
+// rename refuses rather than overwriting - os.Rename would destroy one
+// silently.
+func TestArtistRenamePreview_LeavesSubfoldersAloneAndNeverOverwrites(t *testing.T) {
+	db := openTestDB(t)
+	artistID, albumID, artistPath := importedAlbum(t, db)
+	ctx := context.Background()
+	svc := &ImportService{DB: db}
+	albumPath, _ := store.AlbumFolderPath(ctx, db, albumID)
+
+	// Put one file in an edition subfolder, as a hand-managed library has.
+	refs, _ := store.ListTrackFilesForAlbum(ctx, db, albumID)
+	if len(refs) != 2 {
+		t.Fatalf("want two seeded files, got %d", len(refs))
+	}
+	edition := filepath.Join(albumPath, "12 Vinyl 01")
+	if err := os.MkdirAll(edition, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	moved := filepath.Join("12 Vinyl 01", filepath.Base(refs[0].RelativePath))
+	if err := os.Rename(filepath.Join(albumPath, refs[0].RelativePath), filepath.Join(albumPath, moved)); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.UpdateTrackFilePath(ctx, db, refs[0].ID, moved); err != nil {
+		t.Fatal(err)
+	}
+
+	_, items, skipped, err := svc.ArtistRenamePreview(ctx, artistID)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	for _, item := range items {
+		if strings.Contains(item.Current, "12 Vinyl 01") {
+			t.Errorf("want the subfolder file left out of the rename rows, got %+v", item)
+		}
+	}
+	if len(skipped) != 1 || skipped[0].Files != 1 || !strings.Contains(skipped[0].Folder, "12 Vinyl 01") {
+		t.Fatalf("want the subfolder reported once for re-matching, got %+v", skipped)
+	}
+
+	// Renaming everything on offer must leave both files on disk.
+	var ids []int64
+	for _, item := range items {
+		ids = append(ids, item.FileID)
+	}
+	if _, problems, err := svc.RenameArtistFiles(ctx, artistID, ids); err != nil || len(problems) != 0 {
+		t.Fatalf("rename: %v %v", problems, err)
+	}
+	if _, err := os.Stat(filepath.Join(albumPath, moved)); err != nil {
+		t.Errorf("want the edition's file untouched: %v", err)
+	}
+	refs, _ = store.ListTrackFilesForAlbum(ctx, db, albumID)
+	if len(refs) != 2 {
+		t.Fatalf("want both files still tracked, got %d", len(refs))
+	}
+
+	// A destination that already exists is refused, not overwritten.
+	artistPathClean := filepath.Clean(artistPath)
+	occupied := RenameItem{FileID: refs[1].ID, FileIDs: []int64{refs[1].ID},
+		Current: mustRel(t, artistPathClean, filepath.Join(albumPath, refs[1].RelativePath)),
+		New:     mustRel(t, artistPathClean, filepath.Join(albumPath, moved))}
+	renamed, problems, err := svc.renameTrackFiles(ctx, artistPathClean, []RenameItem{occupied}, []int64{refs[1].ID})
+	if err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if renamed != 0 || len(problems) != 1 || !strings.Contains(problems[0], "already exists") {
+		t.Fatalf("want the overwrite refused and reported, got renamed=%d problems=%v", renamed, problems)
+	}
+	for _, name := range []string{moved, refs[1].RelativePath} {
+		if _, err := os.Stat(filepath.Join(albumPath, name)); err != nil {
+			t.Errorf("want %s still on disk: %v", name, err)
+		}
+	}
+}
+
+func mustRel(t *testing.T, base, path string) string {
+	t.Helper()
+	rel, err := filepath.Rel(base, path)
+	if err != nil {
+		t.Fatalf("rel %s %s: %v", base, path, err)
+	}
+	return rel
 }

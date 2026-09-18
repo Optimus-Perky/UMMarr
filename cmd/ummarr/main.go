@@ -142,15 +142,23 @@ func main() {
 				return err
 			}
 			totalFiles, totalArtists, failed := 0, 0, 0
+			totalSkipped, skippedFolders := 0, 0
 			for _, artist := range artists {
 				if len(args) > 0 && !strings.Contains(strings.ToLower(artist.Name), strings.ToLower(args[0])) {
 					continue
 				}
-				root, items, err := svc.ArtistRenamePreview(ctx, artist.ID)
+				root, items, skipped, err := svc.ArtistRenamePreview(ctx, artist.ID)
 				if err != nil {
 					fmt.Printf("%s: %v\n", artist.Name, err)
 					failed++
 					continue
+				}
+				for _, skip := range skipped {
+					totalSkipped += skip.Files
+					skippedFolders++
+					if renameAll {
+						fmt.Printf("\n%s: left alone, %d file(s) in %s\n", artist.Name, skip.Files, skip.Folder)
+					}
 				}
 				if len(items) == 0 {
 					continue
@@ -169,7 +177,10 @@ func main() {
 					fmt.Printf("  ... and %d more (--all to list them)\n", len(items)-len(show))
 				}
 			}
-			fmt.Printf("\n%d file(s) across %d artist(s) don't match the templates.\n", totalFiles, totalArtists)
+			fmt.Printf("\n%d file(s) across %d artist(s) would be renamed.\n", totalFiles, totalArtists)
+			if skippedFolders > 0 {
+				fmt.Printf("%d file(s) in %d subfolder(s) were left alone - a disc or a second edition the templates can not express (--all lists them).\n", totalSkipped, skippedFolders)
+			}
 			if failed > 0 {
 				fmt.Printf("%d artist(s) couldn't be read - see above.\n", failed)
 			}

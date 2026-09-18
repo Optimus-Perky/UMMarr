@@ -41,11 +41,11 @@ func (h *handler) ArtistRenamePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := renamePreviewData{Action: fmt.Sprintf("/music/artists/%d/rename", artist.ID), Pattern: h.musicNamingPattern(r)}
-	path, items, err := h.deps.Import.ArtistRenamePreview(r.Context(), artist.ID)
+	path, items, skipped, err := h.deps.Import.ArtistRenamePreview(r.Context(), artist.ID)
 	if err != nil {
 		data.Err = err.Error()
 	}
-	data.Root, data.Items = path, items
+	data.Root, data.Items, data.Skipped = path, items, skipped
 	h.renderPartial(w, "rename_preview", data)
 }
 
@@ -79,11 +79,11 @@ func (h *handler) AlbumRenamePreview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	data := renamePreviewData{Action: fmt.Sprintf("/music/albums/%d/rename", albumID), Pattern: h.musicNamingPattern(r)}
-	path, items, err := h.deps.Import.AlbumRenamePreview(r.Context(), albumID)
+	path, items, skipped, err := h.deps.Import.AlbumRenamePreview(r.Context(), albumID)
 	if err != nil {
 		data.Err = err.Error()
 	}
-	data.Root, data.Items = path, items
+	data.Root, data.Items, data.Skipped = path, items, skipped
 	h.renderPartial(w, "rename_preview", data)
 }
 

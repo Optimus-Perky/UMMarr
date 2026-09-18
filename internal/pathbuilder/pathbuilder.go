@@ -25,7 +25,29 @@ var tokenPattern = regexp.MustCompile(`\{([^{}:]+)(?::(0+))?\}`)
 // token with no entry in tokens resolves to "" rather than leaving the
 // literal placeholder in place - callers control what appears by what
 // they put in the map, not by what's in the template.
+// bracketedToken matches a token wrapped in brackets - "({Release Year})",
+// "[{Quality Title}]" - so an empty value can take its brackets with it
+// instead of leaving "Superfly ()" on disk.
+var bracketedToken = regexp.MustCompile(`\s*[\(\[\{]\s*(\{[A-Za-z][A-Za-z0-9 ]*(?::0+)?\})\s*[\)\]\}]`)
+
+var repeatedSpaces = regexp.MustCompile(`  +`)
+
 func ResolveTemplate(template string, tokens map[string]string) string {
+	// Drop bracket groups whose only content is a token nothing filled in.
+	// An album with no release date is the common case: the template says
+	// "{Album Title} ({Release Year})" and the year is unknown.
+	template = bracketedToken.ReplaceAllStringFunc(template, func(match string) string {
+		inner := bracketedToken.FindStringSubmatch(match)[1]
+		groups := tokenPattern.FindStringSubmatch(inner)
+		if groups != nil && tokens[groups[1]] == "" {
+			return ""
+		}
+		return match
+	})
+	return repeatedSpaces.ReplaceAllString(resolveTokens(template, tokens), " ")
+}
+
+func resolveTokens(template string, tokens map[string]string) string {
 	return tokenPattern.ReplaceAllStringFunc(template, func(match string) string {
 		groups := tokenPattern.FindStringSubmatch(match)
 		name, padding := groups[1], groups[2]

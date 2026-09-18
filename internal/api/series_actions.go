@@ -79,6 +79,9 @@ type renamePreviewData struct {
 	Root    string
 	Pattern string
 	Items   []sync.RenameItem
+	// Skipped are folders Organize left alone (music only; see
+	// sync.RenameSkip).
+	Skipped []sync.RenameSkip
 	Err     string
 }
 

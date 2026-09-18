@@ -21,18 +21,18 @@ import (
 // ArtistRenamePreview lists every track file of an artist whose location
 // doesn't match the naming templates. Files already named correctly are
 // left out.
-func (s *ImportService) ArtistRenamePreview(ctx context.Context, artistID int64) (artistPath string, items []RenameItem, err error) {
+func (s *ImportService) ArtistRenamePreview(ctx context.Context, artistID int64) (artistPath string, items []RenameItem, skipped []RenameSkip, err error) {
 	artistPath, err = store.ArtistFolderPath(ctx, s.DB, artistID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	var metadataID int64
 	if err := s.DB.QueryRowContext(ctx, `SELECT artist_metadata_id FROM artists WHERE id = ?`, artistID).Scan(&metadataID); err != nil {
-		return "", nil, fmt.Errorf("find artist %d: %w", artistID, err)
+		return "", nil, nil, fmt.Errorf("find artist %d: %w", artistID, err)
 	}
 	albums, err := store.ListAlbumsForArtist(ctx, s.DB, metadataID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	for _, album := range albums {
 		albumItems, err := s.albumRenameItems(ctx, artistPath, album.ID)
@@ -40,22 +40,43 @@ func (s *ImportService) ArtistRenamePreview(ctx context.Context, artistID int64)
 			continue // one unreadable album shouldn't hide the rest
 		}
 		items = append(items, albumItems...)
+		if albumSkips, err := s.albumRenameSkips(ctx, artistPath, album.ID, album.Title); err == nil {
+			skipped = append(skipped, albumSkips...)
+		}
 	}
-	return artistPath, items, nil
+	return artistPath, items, skipped, nil
 }
 
 // AlbumRenamePreview is the same for one album.
-func (s *ImportService) AlbumRenamePreview(ctx context.Context, albumID int64) (artistPath string, items []RenameItem, err error) {
+func (s *ImportService) AlbumRenamePreview(ctx context.Context, albumID int64) (artistPath string, items []RenameItem, skipped []RenameSkip, err error) {
 	var artistID int64
-	if err := s.DB.QueryRowContext(ctx, `SELECT ar.id FROM albums al JOIN artists ar ON ar.artist_metadata_id = al.artist_metadata_id WHERE al.id = ?`, albumID).Scan(&artistID); err != nil {
-		return "", nil, fmt.Errorf("find the artist of album %d: %w", albumID, err)
+	var title string
+	if err := s.DB.QueryRowContext(ctx, `SELECT ar.id, al.title FROM albums al JOIN artists ar ON ar.artist_metadata_id = al.artist_metadata_id WHERE al.id = ?`, albumID).Scan(&artistID, &title); err != nil {
+		return "", nil, nil, fmt.Errorf("find the artist of album %d: %w", albumID, err)
 	}
 	artistPath, err = store.ArtistFolderPath(ctx, s.DB, artistID)
 	if err != nil {
-		return "", nil, err
+		return "", nil, nil, err
 	}
 	items, err = s.albumRenameItems(ctx, artistPath, albumID)
-	return artistPath, items, err
+	if err != nil {
+		return artistPath, nil, nil, err
+	}
+	skipped, _ = s.albumRenameSkips(ctx, artistPath, albumID, title)
+	return artistPath, items, skipped, nil
+}
+
+// RenameSkip is a folder Organize deliberately left alone: files sitting in
+// a subfolder of the album folder, which the naming templates have no way
+// to express. Those are usually a second edition or a numbered disc ("CD
+// 01", "12 Vinyl 01", "Download Card 02"), and flattening them into the
+// album folder would put two different recordings of the same track on one
+// path - so the file is left where it is and listed here to be re-matched.
+type RenameSkip struct {
+	AlbumID int64
+	Album   string
+	Folder  string // relative to the artist folder
+	Files   int
 }
 
 // albumRenameItems is one album's rows, with paths relative to artistPath.
@@ -74,6 +95,11 @@ func (s *ImportService) albumRenameItems(ctx context.Context, artistPath string,
 	}
 	var items []RenameItem
 	for _, ref := range refs {
+		// A file in a subfolder of the album folder stays put: see
+		// RenameSkip. albumRenameSkips reports those separately.
+		if filepath.Dir(ref.RelativePath) != "." {
+			continue
+		}
 		name, err := store.ResolveTrackFileName(ctx, s.DB, ref.OwnerID, ref.RelativePath)
 		if err != nil {
 			continue
@@ -100,7 +126,7 @@ func (s *ImportService) albumRenameItems(ctx context.Context, artistPath string,
 // folder that the templates now name differently. Empty folders left behind
 // are removed. It reports how many were renamed and what went wrong.
 func (s *ImportService) RenameArtistFiles(ctx context.Context, artistID int64, fileIDs []int64) (renamed int, problems []string, err error) {
-	artistPath, items, err := s.ArtistRenamePreview(ctx, artistID)
+	artistPath, items, _, err := s.ArtistRenamePreview(ctx, artistID)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -109,7 +135,7 @@ func (s *ImportService) RenameArtistFiles(ctx context.Context, artistID int64, f
 
 // RenameAlbumFiles is RenameArtistFiles for one album.
 func (s *ImportService) RenameAlbumFiles(ctx context.Context, albumID int64, fileIDs []int64) (renamed int, problems []string, err error) {
-	artistPath, items, err := s.AlbumRenamePreview(ctx, albumID)
+	artistPath, items, _, err := s.AlbumRenamePreview(ctx, albumID)
 	if err != nil {
 		return 0, nil, err
 	}
@@ -127,11 +153,26 @@ func (s *ImportService) renameTrackFiles(ctx context.Context, artistPath string,
 		chosen[id] = true
 	}
 	touchedAlbums := map[int64]bool{}
+	claimed := map[string]string{} // destination -> the file already heading there
 	for _, item := range items {
 		if !chosen[item.FileID] {
 			continue
 		}
 		src, dest := filepath.Join(artistPath, item.Current), filepath.Join(artistPath, item.New)
+		// Nothing here may destroy a file. RenameFileIfDifferent ends in
+		// os.Rename, which overwrites an existing destination silently, so
+		// a name two files both resolve to has to be refused rather than
+		// applied - whether the other file is already on disk or is another
+		// row of this same run.
+		if other, taken := claimed[dest]; taken {
+			problems = append(problems, fmt.Sprintf("%s: %s wants that name too, so both were left alone", item.Current, other))
+			continue
+		}
+		if _, err := os.Lstat(dest); err == nil {
+			problems = append(problems, fmt.Sprintf("%s: %s already exists, so it was left alone", item.Current, item.New))
+			continue
+		}
+		claimed[dest] = item.Current
 		if err := importer.RenameFileIfDifferent(src, dest, perms); err != nil {
 			problems = append(problems, fmt.Sprintf("%s: %v", item.Current, err))
 			continue
@@ -223,4 +264,38 @@ func (s *ImportService) DeleteTrackFiles(ctx context.Context, albumID int64, fil
 		s.Events.Record(ctx, e)
 	}
 	return removed, nil
+}
+
+// albumRenameSkips groups an album's untouched subfolders, so the dialog
+// can show what Organize left behind and offer to re-match it.
+func (s *ImportService) albumRenameSkips(ctx context.Context, artistPath string, albumID int64, album string) ([]RenameSkip, error) {
+	albumPath, err := store.AlbumFolderPath(ctx, s.DB, albumID)
+	if err != nil {
+		return nil, err
+	}
+	refs, err := store.ListTrackFilesForAlbum(ctx, s.DB, albumID)
+	if err != nil {
+		return nil, err
+	}
+	counts := map[string]int{}
+	var order []string
+	for _, ref := range refs {
+		dir := filepath.Dir(ref.RelativePath)
+		if dir == "." {
+			continue
+		}
+		rel, err := filepath.Rel(artistPath, filepath.Join(albumPath, dir))
+		if err != nil {
+			continue
+		}
+		if _, seen := counts[rel]; !seen {
+			order = append(order, rel)
+		}
+		counts[rel]++
+	}
+	skips := make([]RenameSkip, 0, len(order))
+	for _, rel := range order {
+		skips = append(skips, RenameSkip{AlbumID: albumID, Album: album, Folder: rel, Files: counts[rel]})
+	}
+	return skips, nil
 }
