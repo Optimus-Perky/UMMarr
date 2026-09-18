@@ -177,7 +177,7 @@ func TestFetchEditions(t *testing.T) {
 	}
 	fetcher := &CoverFetcher{DB: db, Discogs: client, Dir: t.TempDir()}
 
-	report, err := fetcher.FetchEditions(ctx, 0)
+	report, err := fetcher.FetchEditions(ctx, 0, false)
 	if err != nil {
 		t.Fatalf("fetch editions: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestFetchEditions(t *testing.T) {
 	}
 
 	// A second run has nothing to do.
-	if report, err := fetcher.FetchEditions(ctx, 0); err != nil || report.Looked != 0 {
+	if report, err := fetcher.FetchEditions(ctx, 0, false); err != nil || report.Looked != 0 {
 		t.Errorf("want nothing left, got %+v (%v)", report, err)
 	}
 }
@@ -265,7 +265,7 @@ func TestFetchEditionsWidensSearch(t *testing.T) {
 		t.Fatal(err)
 	}
 	fetcher := &CoverFetcher{DB: db, Discogs: client, Dir: t.TempDir()}
-	if report, err := fetcher.FetchEditions(ctx, 0); err != nil || report.Filled != 1 {
+	if report, err := fetcher.FetchEditions(ctx, 0, false); err != nil || report.Filled != 1 {
 		t.Fatalf("report = %+v (%v)", report, err)
 	}
 	want := []string{"GB/CD", "GB/", "/CD"}
@@ -305,5 +305,55 @@ func TestRankEdition(t *testing.T) {
 	// Even the worst match is still this album, so it beats no answer.
 	if rankEdition(hit("Russia", "2013", "CD", "Unofficial Release"), uk) < 1 {
 		t.Error("want every real hit to score at least 1")
+	}
+}
+
+// A refresh is for when the picking itself has changed: the editions
+// already recorded were chosen by the old rules, so they are looked up
+// again rather than left alone.
+func TestFetchEditionsRefresh(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	_, albumID, _ := importedAlbum(t, db)
+	if err := store.SetAlbumEdition(ctx, db, albumID, store.AlbumEdition{
+		Label: "Wrong", Country: "Russia", DiscogsReleaseID: 7,
+	}); err != nil {
+		t.Fatal(err)
+	}
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/database/search"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": []discogs.SearchResult{
+				{ID: 42, Title: "Daft Punk - Homework", Country: "UK", Format: []string{"CD", "Album"}},
+			}})
+		case r.URL.Path == "/releases/42":
+			_ = json.NewEncoder(w).Encode(discogs.Release{ID: 42, Title: "Homework", Country: "UK",
+				Formats: []discogs.Format{{Name: "CD", Descriptions: []string{"Album"}}},
+				Labels:  []discogs.Label{{Name: "Virgin", CatalogueNo: "CDV 2821"}}})
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+	client, err := discogs.New(discogs.Options{UserAgent: "UMMarr/test", BaseURL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetcher := &CoverFetcher{DB: db, Discogs: client, Dir: t.TempDir()}
+
+	// Without it, an album that already has an edition is left alone.
+	if report, err := fetcher.FetchEditions(ctx, 0, false); err != nil || report.Looked != 0 {
+		t.Fatalf("want nothing looked at, got %+v (%v)", report, err)
+	}
+	if report, err := fetcher.FetchEditions(ctx, 0, true); err != nil || report.Filled != 1 {
+		t.Fatalf("refresh = %+v (%v)", report, err)
+	}
+	edition, err := store.GetAlbumEdition(ctx, db, albumID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edition.DiscogsReleaseID != 42 || edition.Label != "Virgin" || edition.Country != "UK" {
+		t.Errorf("edition = %+v", edition)
 	}
 }

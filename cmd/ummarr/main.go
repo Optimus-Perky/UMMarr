@@ -219,6 +219,7 @@ func main() {
 	root.AddCommand(fetchCovers)
 
 	var editionLimit int
+	var editionRefresh bool
 	fetchEditions := &cobra.Command{
 		Use:   "fetch-editions",
 		Short: "Ask Discogs what pressing each album is: label, catalogue number, format",
@@ -234,12 +235,13 @@ func main() {
 				return fmt.Errorf("enable Discogs under Settings, Metadata first")
 			}
 			fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: filepath.Join(filepath.Dir(dbPath), "artwork")}
-			report, err := fetcher.FetchEditions(cmd.Context(), editionLimit)
+			report, err := fetcher.FetchEditions(cmd.Context(), editionLimit, editionRefresh)
 			fmt.Println(report.Summary())
 			return err
 		},
 	}
 	fetchEditions.Flags().IntVar(&editionLimit, "limit", 0, "stop after this many albums (0 for all)")
+	fetchEditions.Flags().BoolVar(&editionRefresh, "refresh", false, "look up every album again, replacing the editions already recorded")
 	root.AddCommand(fetchEditions)
 
 	root.AddCommand(&cobra.Command{
@@ -494,7 +496,7 @@ func main() {
 						return nil
 					}
 					fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: artworkDir}
-					report, err := fetcher.FetchEditions(ctx, 0)
+					report, err := fetcher.FetchEditions(ctx, 0, false)
 					log.Printf("fetch edition details: %s", report.Summary())
 					return err
 				}})

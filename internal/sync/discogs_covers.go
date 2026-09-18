@@ -196,12 +196,16 @@ func (r EditionReport) Summary() string {
 // settled on for the copy on disk, and what comes back is scored rather
 // than taken in order - see rankEdition. A cover found on the way is kept
 // too, since the release has been fetched anyway.
-func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int) (EditionReport, error) {
+//
+// Only albums with no edition recorded are looked at, so a second run
+// costs nothing; refresh redoes the lot, which is what to reach for when
+// the picking has changed and the old answers were guesses.
+func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int, refresh bool) (EditionReport, error) {
 	var report EditionReport
 	if f.Discogs == nil {
 		return report, fmt.Errorf("Discogs isn't configured")
 	}
-	candidates, err := store.AlbumsWithoutEditionDetail(ctx, f.DB)
+	candidates, err := store.AlbumsWithoutEditionDetail(ctx, f.DB, refresh)
 	if err != nil {
 		return report, err
 	}

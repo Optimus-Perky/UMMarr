@@ -113,8 +113,14 @@ type AlbumEditionCandidate struct {
 }
 
 // AlbumsWithoutEditionDetail lists albums with files but no edition yet.
-func AlbumsWithoutEditionDetail(ctx context.Context, q Queryer) ([]AlbumEditionCandidate, error) {
-	return albumLookupCandidates(ctx, q, "al.discogs_release_id IS NULL")
+// With refresh it lists them all, for when the way an edition is chosen
+// has changed and what was recorded before is worth redoing.
+func AlbumsWithoutEditionDetail(ctx context.Context, q Queryer, refresh bool) ([]AlbumEditionCandidate, error) {
+	missing := "al.discogs_release_id IS NULL"
+	if refresh {
+		missing = "1 = 1"
+	}
+	return albumLookupCandidates(ctx, q, missing)
 }
 
 // albumLookupCandidates lists albums missing something Discogs can supply,
