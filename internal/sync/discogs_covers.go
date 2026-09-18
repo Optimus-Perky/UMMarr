@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	gosync "sync"
 
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/discogs"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
@@ -26,6 +27,13 @@ import (
 // library: those folders are the user's, and a hand-managed library is
 // exactly where an unexpected file would be unwelcome. A cover the user
 // already has always wins - see store.CoverFile.
+
+// discogsTurn serialises the runs that spend the Discogs quota. Both the
+// cover fetch and the edition fetch are scheduled daily and so come due
+// together, and the quota is counted per address, not per job: running
+// them at once would simply mean both spending half their time waiting
+// out each other 429s. One at a time is no slower and much quieter.
+var discogsTurn gosync.Mutex
 
 // CoverFetcher fills in missing album artwork from Discogs.
 type CoverFetcher struct {
@@ -71,6 +79,8 @@ func (f *CoverFetcher) FetchMissingCovers(ctx context.Context, limit int) (Cover
 	if err := os.MkdirAll(f.Dir, 0o755); err != nil {
 		return report, fmt.Errorf("create artwork folder: %w", err)
 	}
+	discogsTurn.Lock()
+	defer discogsTurn.Unlock()
 	candidates, err := store.AlbumsWithoutCover(ctx, f.DB)
 	if err != nil {
 		return report, err
@@ -218,6 +228,8 @@ func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int, refresh boo
 	if f.Discogs == nil {
 		return report, fmt.Errorf("Discogs isn't configured")
 	}
+	discogsTurn.Lock()
+	defer discogsTurn.Unlock()
 	candidates, err := store.AlbumsWithoutEditionDetail(ctx, f.DB, refresh)
 	if err != nil {
 		return report, err

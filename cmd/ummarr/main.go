@@ -476,7 +476,7 @@ func main() {
 					return err
 				}})
 			artworkDir := filepath.Join(filepath.Dir(dbPath), "artwork")
-			scheduler.Register(&tasks.Task{Name: "Fetch missing artwork",
+			scheduler.Register(&tasks.Task{Name: "Fetch missing artwork", Interval: 24 * time.Hour,
 				Description: "Looks up albums with no cover in their folder on Discogs and keeps the artwork in UMMarr's own folder - nothing is written into the music library. Needs Discogs enabled under Settings -> Metadata.",
 				Run: func(ctx context.Context) error {
 					client := sync.DiscogsFromSettings(ctx, db, cfg.UserAgent)
@@ -488,7 +488,7 @@ func main() {
 					log.Printf("fetch missing artwork: %s", report.Summary())
 					return err
 				}})
-			scheduler.Register(&tasks.Task{Name: "Fetch edition details",
+			scheduler.Register(&tasks.Task{Name: "Fetch edition details", Interval: 24 * time.Hour,
 				Description: "Asks Discogs what pressing each album is - label, catalogue number and whether it is a remaster or a reissue - which MusicBrainz does not carry. Needs Discogs enabled under Settings -> Metadata.",
 				Run: func(ctx context.Context) error {
 					client := sync.DiscogsFromSettings(ctx, db, cfg.UserAgent)

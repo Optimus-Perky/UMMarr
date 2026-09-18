@@ -9,7 +9,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	gosync "sync"
 	"testing"
+	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/discogs"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
@@ -375,5 +377,54 @@ func TestFetchEditionsRefresh(t *testing.T) {
 	}
 	if edition.DiscogsReleaseID != 42 || edition.Label != "Virgin" || edition.Country != "UK" {
 		t.Errorf("edition = %+v", edition)
+	}
+}
+
+// Both Discogs runs are scheduled daily, so they come due at the same
+// moment. They spend one quota between them - Discogs counts per address
+// - so they take turns rather than doubling the request rate and each
+// waiting out the other's 429s.
+func TestDiscogsRunsTakeTurns(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	_, albumID, _ := importedAlbum(t, db)
+	if _, err := db.Exec(`UPDATE albums SET cover_path = NULL, cover_cache = NULL WHERE id = ?`, albumID); err != nil {
+		t.Fatal(err)
+	}
+
+	var mu gosync.Mutex
+	var inFlight, mostAtOnce int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		inFlight++
+		if inFlight > mostAtOnce {
+			mostAtOnce = inFlight
+		}
+		mu.Unlock()
+		time.Sleep(20 * time.Millisecond)
+		mu.Lock()
+		inFlight--
+		mu.Unlock()
+		_ = json.NewEncoder(w).Encode(map[string]any{"results": []discogs.SearchResult{}})
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := discogs.New(discogs.Options{UserAgent: "UMMarr/test", BaseURL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetcher := &CoverFetcher{DB: db, Discogs: client, Dir: t.TempDir()}
+
+	var wg gosync.WaitGroup
+	wg.Add(2)
+	go func() { defer wg.Done(); _, _ = fetcher.FetchMissingCovers(ctx, 0) }()
+	go func() { defer wg.Done(); _, _ = fetcher.FetchEditions(ctx, 0, true) }()
+	wg.Wait()
+
+	if mostAtOnce > 1 {
+		t.Errorf("%d Discogs requests were in flight at once; the runs should take turns", mostAtOnce)
+	}
+	if mostAtOnce == 0 {
+		t.Error("neither run asked Discogs anything, so nothing was proved")
 	}
 }
