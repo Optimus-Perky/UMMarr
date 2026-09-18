@@ -222,6 +222,28 @@ func QualityProfileUsage(ctx context.Context, q Queryer, id int64) (movies, seri
 	return movies, series, artists, nil
 }
 
+// MoveQualityProfile hands everything using one profile to another, which
+// is what the Remove dialog offers rather than making the user re-edit
+// every movie, series and artist by hand.
+func MoveQualityProfile(ctx context.Context, q Queryer, from, to int64) error {
+	if from == to {
+		return fmt.Errorf("pick a different profile to move them to")
+	}
+	var exists int
+	if err := q.QueryRowContext(ctx, `SELECT COUNT(*) FROM quality_profiles WHERE id = ?`, to).Scan(&exists); err != nil {
+		return fmt.Errorf("find quality profile %d: %w", to, err)
+	}
+	if exists == 0 {
+		return fmt.Errorf("that quality profile no longer exists")
+	}
+	for _, table := range []string{"movies", "series", "artists"} {
+		if _, err := q.ExecContext(ctx, `UPDATE `+table+` SET quality_profile_id = ? WHERE quality_profile_id = ?`, to, from); err != nil {
+			return fmt.Errorf("move %s to quality profile %d: %w", table, to, err)
+		}
+	}
+	return nil
+}
+
 // DeleteQualityProfile removes a profile nothing uses. The last profile
 // stays: with none at all, nothing could be added. When the default is
 // removed, the oldest remaining profile takes over, so there is always one

@@ -165,6 +165,7 @@ func parseMediaManagement(r *http.Request) mediaManagementForm {
 	m.ImportUsingScript = checked("import_using_script")
 	m.ImportScriptPath = text("import_script_path")
 	m.RescanAfterRefresh = f.choice(r, "rescan_after_refresh", rescanOptions)
+	m.PreferredReleaseCountries = strings.ToUpper(text("preferred_release_countries"))
 	m.RecycleBinPath = text("recycle_bin_path")
 	if m.RecycleBinPath != "" && !path.IsAbs(m.RecycleBinPath) {
 		f.Errors["recycle_bin_path"] = "Use a full path starting with /, or leave it empty."

@@ -20,14 +20,24 @@ func postForm(t *testing.T, srv *httptest.Server, path string, values url.Values
 	return resp, readBody(t, resp)
 }
 
-// deleteForm is postForm for the DELETE the htmx hx-delete buttons send.
+// deleteForm is postForm for the DELETE an hx-delete button sends. htmx
+// puts a DELETE's parameters in the query string, not the body
+// (methodsThatUseUrlParams: ["get", "delete"]), and Go's ParseForm only
+// reads a body for POST/PUT/PATCH - so sending them as a body here would
+// test something the browser never does.
 func deleteForm(t *testing.T, srv *httptest.Server, path string, values url.Values) (*http.Response, string) {
 	t.Helper()
-	req, err := http.NewRequest(http.MethodDelete, srv.URL+path, strings.NewReader(values.Encode()))
+	if len(values) > 0 {
+		separator := "?"
+		if strings.Contains(path, "?") {
+			separator = "&"
+		}
+		path += separator + values.Encode()
+	}
+	req, err := http.NewRequest(http.MethodDelete, srv.URL+path, nil)
 	if err != nil {
 		t.Fatalf("DELETE %s: %v", path, err)
 	}
-	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		t.Fatalf("DELETE %s: %v", path, err)

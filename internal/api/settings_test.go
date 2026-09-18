@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"io"
 	"net/http"
@@ -318,4 +319,71 @@ func TestDeleteQualityProfile(t *testing.T) {
 	if profiles, _ := store.ListQualityProfiles(ctx, db); len(profiles) == 0 {
 		t.Fatal("want the profile kept")
 	}
+}
+
+// Refusing to delete a profile in use isn't much help on its own: the
+// refusal offers to move whatever uses it to another profile, and doing
+// that removes it in one go.
+func TestDeleteQualityProfile_OffersToMoveWhatUsesIt(t *testing.T) {
+	db := openTestDB(t)
+	srv := newTestServerWithDB(t, db)
+	ctx := t.Context()
+
+	inUse, err := store.CreateQualityProfile(ctx, db, "Old")
+	if err != nil {
+		t.Fatal(err)
+	}
+	target, err := store.CreateQualityProfile(ctx, db, "New")
+	if err != nil {
+		t.Fatal(err)
+	}
+	root, err := store.CreateRootFolder(ctx, db, t.TempDir(), "movie")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO movie_metadata (title, clean_title, sort_title) VALUES ('Heat', 'heat', 'heat')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO movies (movie_metadata_id, quality_profile_id, root_folder_id, monitored, added) VALUES (1, ?, ?, 1, CURRENT_TIMESTAMP)`, inUse, root); err != nil {
+		t.Fatal(err)
+	}
+
+	// The refusal offers the other profiles.
+	_, body := deleteForm(t, srv, "/settings/quality-profiles/"+itoa(inUse), nil)
+	if !strings.Contains(body, "1 movie still using this profile") {
+		t.Fatalf("want the refusal to say what uses it, got: %s", body)
+	}
+	if !strings.Contains(body, `name="move_to"`) || !strings.Contains(body, "Move and remove") {
+		t.Fatalf("want the offer to move them, got: %s", body)
+	}
+	if !strings.Contains(body, `<option value="`+itoa(target)+`">New</option>`) {
+		t.Errorf("want the other profile offered as a destination, got: %s", body)
+	}
+
+	// Taking the offer moves the movie and removes the profile.
+	resp, body := deleteForm(t, srv, "/settings/quality-profiles/"+itoa(inUse), url.Values{"move_to": {itoa(target)}})
+	if resp.StatusCode != 200 || resp.Header.Get("HX-Redirect") == "" {
+		t.Fatalf("move and remove = %d: %s", resp.StatusCode, body)
+	}
+	var profile int64
+	if err := db.QueryRow(`SELECT quality_profile_id FROM movies WHERE id = 1`).Scan(&profile); err != nil {
+		t.Fatal(err)
+	}
+	if profile != target {
+		t.Errorf("movie is on profile %d, want %d", profile, target)
+	}
+	for _, p := range mustProfiles(t, db) {
+		if p.ID == inUse {
+			t.Error("want the old profile removed")
+		}
+	}
+}
+
+func mustProfiles(t *testing.T, db *sql.DB) []store.QualityProfile {
+	t.Helper()
+	profiles, err := store.ListQualityProfiles(t.Context(), db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return profiles
 }

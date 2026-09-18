@@ -329,3 +329,44 @@ func TestSettings_Tabs(t *testing.T) {
 		t.Fatalf("want an unknown tab to 404, got %d", status)
 	}
 }
+
+// Preferred release countries decide which pressing of an album gets
+// tracked, so the setting has to round-trip like the rest.
+func TestMediaManagement_PreferredReleaseCountries(t *testing.T) {
+	db := openTestDB(t)
+	srv := newTestServerWithDB(t, db)
+	ctx := t.Context()
+
+	before, err := store.GetMediaSettings(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if before.PreferredReleaseCountries == "" {
+		t.Error("want a default country preference rather than none")
+	}
+
+	_, body := get(t, srv, "/settings/media-management")
+	if !strings.Contains(body, `name="preferred_release_countries"`) {
+		t.Fatalf("want the setting on the page, got:\n%s", body)
+	}
+
+	form := currentMediaManagementForm(t, db)
+	form.Set("preferred_release_countries", "gb, ie ,us")
+	if resp, body := postForm(t, srv, "/settings/media-management", form); resp.StatusCode != 200 {
+		t.Fatalf("save = %d: %s", resp.StatusCode, body)
+	}
+	after, err := store.GetMediaSettings(ctx, db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if after.PreferredReleaseCountries != "GB, IE ,US" {
+		t.Errorf("stored %q", after.PreferredReleaseCountries)
+	}
+	got := after.ReleaseCountries()
+	want := []string{"GB", "IE", "US"}
+	for i := range want {
+		if i >= len(got) || got[i] != want[i] {
+			t.Fatalf("ReleaseCountries() = %v, want %v", got, want)
+		}
+	}
+}

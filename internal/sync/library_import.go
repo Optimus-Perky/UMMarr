@@ -575,7 +575,11 @@ func (s *ImportService) importArtistFolder(ctx context.Context, ms store.MediaSe
 			s.noteUnmatched(ctx, update, name+" / "+e.Name(), albumDir, store.UnmatchedNoMatch, "")
 			continue
 		}
-		albumID, err := s.Music.AddAlbumByMBID(ctx, rg.ID, artistID)
+		// What the folder itself says: the release its files name, and the
+		// highest track number in it, so a 13-track UK pressing is not
+		// mistaken for a 16-track Japanese one.
+		hint := s.Music.FolderReleaseHint(ctx, albumDir)
+		albumID, err := s.Music.AddAlbumByMBIDWithHint(ctx, rg.ID, artistID, hint)
 		if err != nil {
 			fail(update, name+" / "+e.Name(), err)
 			continue

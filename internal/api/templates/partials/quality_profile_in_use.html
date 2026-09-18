@@ -1,0 +1,10 @@
+{{define "quality_profile_in_use"}}
+<div class="indexer-test failed">{{.Message}}</div>
+{{if .Others}}
+<form class="form-row" style="margin-top:8px" hx-delete="/settings/quality-profiles/{{.ID}}" hx-target="#quality-profile-result" hx-swap="innerHTML">
+  <span class="setting-help">Move them to</span>
+  <select name="move_to">{{range .Others}}<option value="{{.ID}}">{{.Name}}</option>{{end}}</select>
+  <button class="btn btn-sm btn-danger" type="submit">Move and remove</button>
+</form>
+{{end}}
+{{end}}

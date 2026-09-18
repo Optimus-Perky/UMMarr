@@ -740,6 +740,14 @@
         {{with index $errors "track_file_date"}}<span class="setting-error">{{.}}</span>{{end}}
       </div>
     </div>
+    <div class="setting-row">
+      <div class="setting-label">Preferred Release Countries</div>
+      <div class="setting-control">
+        <input type="text" name="preferred_release_countries" value="{{$media.PreferredReleaseCountries}}" placeholder="GB,US">
+        <span class="setting-help">Which pressing of an album to track when MusicBrainz lists several, in order - a UK CD with 13 tracks is a different release from a Japanese one with 16. Two-letter codes, comma separated; blank for no preference. What an album&#39;s own files say (their MusicBrainz release id) and the highest track number in its folder both come first.</span>
+        {{with index $errors "preferred_release_countries"}}<span class="setting-error">{{.}}</span>{{end}}
+      </div>
+    </div>
     <div class="setting-row advanced">
       <div class="setting-label">Recycling Bin</div>
       <div class="setting-control">

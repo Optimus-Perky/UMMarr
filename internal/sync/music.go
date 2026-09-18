@@ -56,6 +56,13 @@ func (s *MusicService) AddArtistByMBID(ctx context.Context, mbid string, rootFol
 // tracked), which is what makes Various Artists compilations resolve
 // correctly per-track.
 func (s *MusicService) AddAlbumByMBID(ctx context.Context, releaseGroupMBID string, artistID int64) (int64, error) {
+	return s.AddAlbumByMBIDWithHint(ctx, releaseGroupMBID, artistID, ReleaseHint{})
+}
+
+// AddAlbumByMBIDWithHint is AddAlbumByMBID told what the folder it came
+// from looks like, so the right pressing is chosen rather than whichever
+// release MusicBrainz listed first (see album_releases.go).
+func (s *MusicService) AddAlbumByMBIDWithHint(ctx context.Context, releaseGroupMBID string, artistID int64, hint ReleaseHint) (int64, error) {
 	rg, err := s.MusicBrainz.GetReleaseGroup(ctx, releaseGroupMBID)
 	if err != nil {
 		return 0, fmt.Errorf("fetch musicbrainz release-group %s: %w", releaseGroupMBID, err)
@@ -98,7 +105,7 @@ func (s *MusicService) AddAlbumByMBID(ctx context.Context, releaseGroupMBID stri
 		return 0, fmt.Errorf("add album (mbid %s): %w", releaseGroupMBID, err)
 	}
 
-	if err := s.syncRepresentativeRelease(ctx, rg, albumID); err != nil {
+	if err := s.syncRepresentativeRelease(ctx, rg, albumID, hint); err != nil {
 		// The album itself is saved; a release/track sync failure (e.g. a
 		// transient MusicBrainz error) shouldn't undo that - surfaced as
 		// an error so the caller knows tracks didn't sync, but the album
@@ -110,8 +117,12 @@ func (s *MusicService) AddAlbumByMBID(ctx context.Context, releaseGroupMBID stri
 
 // syncRepresentativeRelease picks one release from the release-group
 // (preferring Status == "Official") and syncs its full track listing.
-func (s *MusicService) syncRepresentativeRelease(ctx context.Context, rg *musicbrainz.ReleaseGroup, albumID int64) error {
-	releaseRef := pickRepresentativeRelease(rg.Releases)
+func (s *MusicService) syncRepresentativeRelease(ctx context.Context, rg *musicbrainz.ReleaseGroup, albumID int64, hint ReleaseHint) error {
+	countries := []string{}
+	if ms, err := store.GetMediaSettings(ctx, s.DB); err == nil {
+		countries = ms.ReleaseCountries()
+	}
+	releaseRef := PickRelease(rg.Releases, hint, countries)
 	if releaseRef == nil {
 		return nil // no releases listed - nothing to sync tracks from
 	}
@@ -181,18 +192,6 @@ func (s *MusicService) resolveTrackArtist(ctx context.Context, tx *sql.Tx, credi
 	return id, nil
 }
 
-func pickRepresentativeRelease(releases []musicbrainz.ReleaseRef) *musicbrainz.ReleaseRef {
-	for i := range releases {
-		if releases[i].Status == "Official" {
-			return &releases[i]
-		}
-	}
-	if len(releases) > 0 {
-		return &releases[0]
-	}
-	return nil
-}
-
 // FixMatchArtist points artistID at MusicBrainz artist mbid instead, along
 // with the albums and tracks credited to it.
 func (s *MusicService) FixMatchArtist(ctx context.Context, artistID int64, mbid string) error {
@@ -237,5 +236,5 @@ func (s *MusicService) FixMatchAlbum(ctx context.Context, albumID int64, release
 	if err != nil {
 		return err
 	}
-	return s.syncRepresentativeRelease(ctx, rg, albumID)
+	return s.syncRepresentativeRelease(ctx, rg, albumID, ReleaseHint{})
 }

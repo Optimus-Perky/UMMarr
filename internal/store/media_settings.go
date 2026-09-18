@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	"github.com/Optimus-Perky/UMMarr/internal/pathbuilder"
 )
@@ -63,6 +64,22 @@ type MediaSettings struct {
 	// AnalyzeAudioFiles music; PlexMediaInfo reads Plex's analysis first.
 	AnalyzeAudioFiles bool
 	PlexMediaInfo     bool
+
+	// PreferredReleaseCountries orders which pressing of an album to track
+	// when MusicBrainz lists several - "GB,US" means a British release,
+	// then an American one, then anything. Empty means no preference.
+	PreferredReleaseCountries string
+}
+
+// ReleaseCountries is PreferredReleaseCountries as an upper-cased list.
+func (s MediaSettings) ReleaseCountries() []string {
+	var out []string
+	for _, c := range strings.Split(s.PreferredReleaseCountries, ",") {
+		if c = strings.ToUpper(strings.TrimSpace(c)); c != "" {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // PathOptions is the part of s that path and file name resolution needs.
@@ -83,14 +100,16 @@ func GetMediaSettings(ctx context.Context, q Queryer) (MediaSettings, error) {
 		       extra_file_extensions, unmonitor_deleted, movie_file_date, episode_file_date,
 		       track_file_date, set_permissions, chmod_folder, chown_group,
 		       propers_repacks, analyze_video_files, import_using_script, import_script_path,
-		       rescan_after_refresh, recycle_bin_path, recycle_bin_cleanup_days, analyze_audio_files, plex_media_info
+		       rescan_after_refresh, recycle_bin_path, recycle_bin_cleanup_days, analyze_audio_files, plex_media_info,
+		       preferred_release_countries
 		FROM media_settings WHERE id = 1
 	`).Scan(&s.ReplaceIllegalCharacters, &s.ColonReplacement, &s.CreateEmptyFolders, &s.DeleteEmptyFolders,
 		&s.SkipFreeSpaceCheck, &s.MinimumFreeSpaceMB, &s.UseHardlinks, &s.ImportExtraFiles,
 		&s.ExtraFileExtensions, &s.UnmonitorDeleted, &s.MovieFileDate, &s.EpisodeFileDate,
 		&s.TrackFileDate, &s.SetPermissions, &s.ChmodFolder, &s.ChownGroup,
 		&s.PropersRepacks, &s.AnalyzeVideoFiles, &s.ImportUsingScript, &s.ImportScriptPath,
-		&s.RescanAfterRefresh, &s.RecycleBinPath, &s.RecycleBinCleanupDays, &s.AnalyzeAudioFiles, &s.PlexMediaInfo)
+		&s.RescanAfterRefresh, &s.RecycleBinPath, &s.RecycleBinCleanupDays, &s.AnalyzeAudioFiles, &s.PlexMediaInfo,
+		&s.PreferredReleaseCountries)
 	if err != nil {
 		return MediaSettings{}, fmt.Errorf("get media settings: %w", err)
 	}
@@ -107,14 +126,16 @@ func UpdateMediaSettings(ctx context.Context, q Queryer, s MediaSettings) error 
 		       extra_file_extensions = ?, unmonitor_deleted = ?, movie_file_date = ?, episode_file_date = ?,
 		       track_file_date = ?, set_permissions = ?, chmod_folder = ?, chown_group = ?,
 		       propers_repacks = ?, analyze_video_files = ?, import_using_script = ?, import_script_path = ?,
-		       rescan_after_refresh = ?, recycle_bin_path = ?, recycle_bin_cleanup_days = ?, analyze_audio_files = ?, plex_media_info = ?
+		       rescan_after_refresh = ?, recycle_bin_path = ?, recycle_bin_cleanup_days = ?, analyze_audio_files = ?, plex_media_info = ?,
+		       preferred_release_countries = ?
 		WHERE id = 1
 	`, s.ReplaceIllegalCharacters, s.ColonReplacement, s.CreateEmptyFolders, s.DeleteEmptyFolders,
 		s.SkipFreeSpaceCheck, s.MinimumFreeSpaceMB, s.UseHardlinks, s.ImportExtraFiles,
 		s.ExtraFileExtensions, s.UnmonitorDeleted, s.MovieFileDate, s.EpisodeFileDate,
 		s.TrackFileDate, s.SetPermissions, s.ChmodFolder, s.ChownGroup,
 		s.PropersRepacks, s.AnalyzeVideoFiles, s.ImportUsingScript, s.ImportScriptPath,
-		s.RescanAfterRefresh, s.RecycleBinPath, s.RecycleBinCleanupDays, s.AnalyzeAudioFiles, s.PlexMediaInfo)
+		s.RescanAfterRefresh, s.RecycleBinPath, s.RecycleBinCleanupDays, s.AnalyzeAudioFiles, s.PlexMediaInfo,
+		s.PreferredReleaseCountries)
 	if err != nil {
 		return fmt.Errorf("update media settings: %w", err)
 	}

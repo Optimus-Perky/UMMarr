@@ -662,17 +662,65 @@ func (h *handler) UpdateMetadataSettings(w http.ResponseWriter, r *http.Request)
 	w.Write([]byte(`<p class="indexer-test ok">Saved. New imports get metadata; System → Tasks → Write metadata does the whole library.</p>`))
 }
 
-// DeleteQualityProfile removes a profile nothing is using.
+// DeleteQualityProfile removes a profile. One still in use is refused, and
+// the refusal comes back as a form offering to move what uses it to another
+// profile (move_to) rather than leaving the user to re-edit each item.
 func (h *handler) DeleteQualityProfile(w http.ResponseWriter, r *http.Request) {
 	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
 	if err != nil {
 		http.Error(w, "invalid quality profile id", http.StatusBadRequest)
 		return
 	}
-	if err := store.DeleteQualityProfile(r.Context(), h.deps.DB, id); err != nil {
-		renderInlineError(w, err.Error())
+	ctx := r.Context()
+	_ = r.ParseForm()
+	if v := r.FormValue("move_to"); v != "" {
+		to, err := strconv.ParseInt(v, 10, 64)
+		if err != nil {
+			renderInlineError(w, "Pick a profile to move them to.")
+			return
+		}
+		if err := store.MoveQualityProfile(ctx, h.deps.DB, id, to); err != nil {
+			renderInlineError(w, err.Error())
+			return
+		}
+	}
+	if err := store.DeleteQualityProfile(ctx, h.deps.DB, id); err != nil {
+		h.renderProfileInUse(w, ctx, id, err)
 		return
 	}
 	w.Header().Set("HX-Redirect", "/settings/profiles")
 	w.WriteHeader(http.StatusOK)
+}
+
+// renderProfileInUse turns a refusal into the offer to move things: the
+// message, plus a picker of the other profiles and a button that moves and
+// then removes in one go.
+func (h *handler) renderProfileInUse(w http.ResponseWriter, ctx context.Context, id int64, cause error) {
+	movies, series, artists, err := store.QualityProfileUsage(ctx, h.deps.DB, id)
+	if err != nil || movies+series+artists == 0 {
+		renderInlineError(w, cause.Error())
+		return
+	}
+	profiles, err := store.ListQualityProfiles(ctx, h.deps.DB)
+	if err != nil {
+		renderInlineError(w, cause.Error())
+		return
+	}
+	var others []store.QualityProfile
+	for _, p := range profiles {
+		if p.ID != id {
+			others = append(others, p)
+		}
+	}
+	h.renderPartial(w, "quality_profile_in_use", profileInUseData{
+		ID: id, Message: cause.Error(), Others: others,
+		Movies: movies, Series: series, Artists: artists,
+	})
+}
+
+type profileInUseData struct {
+	ID                      int64
+	Message                 string
+	Others                  []store.QualityProfile
+	Movies, Series, Artists int
 }
