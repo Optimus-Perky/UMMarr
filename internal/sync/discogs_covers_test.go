@@ -302,6 +302,26 @@ func TestRankEdition(t *testing.T) {
 	if rankEdition(hit("US", ""), blank) <= rankEdition(hit("Japan", ""), blank) {
 		t.Error("want US preferred over the rest when there is no GB pressing")
 	}
+	// MusicBrainz very often has no medium at all. The library is still
+	// files, which were ripped from something, and it was not a cassette.
+	noMedium := store.AlbumEditionCandidate{Country: "GB"}
+	cd := rankEdition(hit("GB", "", "CD", "Album"), noMedium)
+	for name, worse := range map[string]discogs.SearchResult{
+		"a cassette":   hit("GB", "", "Cassette", "Album"),
+		"an LP":        hit("GB", "", "Vinyl", "LP", "Album"),
+		"a club issue": hit("GB", "", "CD", "Album", "Club Edition"),
+		"a misprint":   hit("GB", "", "CD", "Album", "Misprint"),
+	} {
+		if score := rankEdition(worse, noMedium); score >= cd {
+			t.Errorf("%s scored %d, not below the CD's %d", name, score, cd)
+		}
+	}
+	// When MusicBrainz does name the medium, it wins over that default.
+	vinyl := store.AlbumEditionCandidate{Country: "GB", Format: "Vinyl"}
+	if rankEdition(hit("GB", "", "Vinyl", "LP"), vinyl) <= rankEdition(hit("GB", "", "CD", "Album"), vinyl) {
+		t.Error("want the medium MusicBrainz named preferred over the CD default")
+	}
+
 	// Even the worst match is still this album, so it beats no answer.
 	if rankEdition(hit("Russia", "2013", "CD", "Unofficial Release"), uk) < 1 {
 		t.Error("want every real hit to score at least 1")

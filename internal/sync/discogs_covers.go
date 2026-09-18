@@ -337,8 +337,20 @@ func rankEdition(r discogs.SearchResult, c store.AlbumEditionCandidate) int {
 	}
 	// Medium. A rip of a CD described as a cassette is wrong even when
 	// every other detail lines up.
-	if c.Format != "" && hasFormat(r.Format, c.Format) {
+	switch {
+	case c.Format != "" && hasFormat(r.Format, c.Format):
 		score += 30
+	case c.Format != "":
+		// MusicBrainz named a medium and this is not it.
+	case hasFormat(r.Format, "CD"):
+		// MusicBrainz often has no medium at all, and the library is
+		// files: almost every one of them was ripped from a CD, and none
+		// of them was ever a cassette.
+		score += 25
+	case hasFormat(r.Format, "File"), hasFormat(r.Format, "Digital"):
+		score += 18
+	case hasFormat(r.Format, "Cassette"), hasFormat(r.Format, "8-Track Cartridge"):
+		score -= 10
 	}
 	// Year, from the chosen release first and the album's own date as a
 	// fallback: a remaster and its original differ by little else.
@@ -354,8 +366,12 @@ func rankEdition(r discogs.SearchResult, c store.AlbumEditionCandidate) int {
 	// list. None of it belongs in a library's edition line.
 	for _, f := range r.Format {
 		switch strings.ToLower(f) {
-		case "unofficial release", "promo", "test pressing", "transcription", "mispress":
+		case "unofficial release", "promo", "test pressing", "transcription", "mispress", "misprint", "white label", "acetate", "sampler":
 			score -= 35
+		case "club edition", "repress", "unofficial":
+			// Real pressings, but not the one to name an album after
+			// while an ordinary copy is on the table.
+			score -= 8
 		case "album":
 			score += 5
 		}
