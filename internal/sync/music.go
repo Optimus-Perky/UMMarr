@@ -126,25 +126,29 @@ func (s *MusicService) syncRepresentativeRelease(ctx context.Context, rg *musicb
 	if releaseRef == nil {
 		return nil // no releases listed - nothing to sync tracks from
 	}
-	return s.syncRelease(ctx, albumID, releaseRef.ID)
+	_, err := s.syncRelease(ctx, albumID, releaseRef.ID)
+	return err
 }
 
-// syncRelease writes one specific release's tracks onto an album.
-func (s *MusicService) syncRelease(ctx context.Context, albumID int64, releaseMBID string) error {
+// syncRelease writes one specific release's tracks onto an album and
+// returns the release row it wrote.
+func (s *MusicService) syncRelease(ctx context.Context, albumID int64, releaseMBID string) (int64, error) {
 	release, err := s.MusicBrainz.GetRelease(ctx, releaseMBID)
 	if err != nil {
-		return fmt.Errorf("fetch musicbrainz release %s: %w", releaseMBID, err)
+		return 0, fmt.Errorf("fetch musicbrainz release %s: %w", releaseMBID, err)
 	}
 	mergedRelease, tracks, _ := merge.MergeReleaseFromProvider(release)
 
 	// A track with no credit of its own belongs to the album's artist.
 	var albumArtistID int64
 	if err := s.DB.QueryRowContext(ctx, `SELECT artist_metadata_id FROM albums WHERE id = ?`, albumID).Scan(&albumArtistID); err != nil {
-		return fmt.Errorf("find album %d: %w", albumID, err)
+		return 0, fmt.Errorf("find album %d: %w", albumID, err)
 	}
 
-	return store.WithTx(ctx, s.DB, func(tx *sql.Tx) error {
-		releaseID, err := store.UpsertAlbumRelease(ctx, tx, albumID, mergedRelease)
+	var releaseID int64
+	err = store.WithTx(ctx, s.DB, func(tx *sql.Tx) error {
+		var err error
+		releaseID, err = store.UpsertAlbumRelease(ctx, tx, albumID, mergedRelease)
 		if err != nil {
 			return err
 		}
@@ -169,6 +173,7 @@ func (s *MusicService) syncRelease(ctx context.Context, albumID int64, releaseMB
 		}
 		return nil
 	})
+	return releaseID, err
 }
 
 func (s *MusicService) resolveTrackArtist(ctx context.Context, tx *sql.Tx, credit metadata.ArtistCreditRef, cache map[string]int64) (int64, error) {

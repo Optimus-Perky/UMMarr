@@ -209,3 +209,59 @@ func discogsFormat(medium string) string {
 	}
 	return ""
 }
+
+// CurrentRelease is the release an album is tracking: which pressing
+// MusicBrainz says the library holds, as opposed to the Discogs edition
+// detail beside it.
+type CurrentRelease struct {
+	Title          string
+	Disambiguation string
+	Country        string
+	Date           string
+	TrackCount     int
+	MBID           string
+}
+
+// Summary is the release on one line, or "" when there is nothing to say.
+func (r CurrentRelease) Summary() string {
+	var parts []string
+	if r.TrackCount > 0 {
+		parts = append(parts, strconv.Itoa(r.TrackCount)+" tracks")
+	}
+	if r.Country != "" {
+		parts = append(parts, r.Country)
+	}
+	if r.Date != "" {
+		parts = append(parts, r.Date)
+	}
+	if r.Disambiguation != "" {
+		parts = append(parts, r.Disambiguation)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// GetCurrentRelease reads the release an album's files hang off. It
+// matches FindImportRelease's choice, so the page names the release the
+// rest of UMMarr is actually using.
+func GetCurrentRelease(ctx context.Context, q Queryer, albumID int64) (CurrentRelease, bool) {
+	var r CurrentRelease
+	var disambiguation, country, date sql.NullString
+	var trackCount sql.NullInt64
+	err := q.QueryRowContext(ctx, `
+		SELECT ar.title, ar.disambiguation, ar.country, ar.release_date, ar.track_count,
+		       COALESCE((SELECT e.external_id FROM external_ids e
+		                 WHERE e.entity_type = 'release' AND e.entity_id = ar.id AND e.provider = 'musicbrainz'), '')
+		FROM album_releases ar
+		WHERE ar.album_id = ?
+		ORDER BY ar.monitored DESC,
+		         (SELECT COUNT(*) FROM tracks t WHERE t.album_release_id = ar.id) DESC,
+		         ar.id ASC
+		LIMIT 1`, albumID).Scan(&r.Title, &disambiguation, &country, &date, &trackCount, &r.MBID)
+	if err != nil {
+		return CurrentRelease{}, false
+	}
+	r.Disambiguation, r.Date = disambiguation.String, date.String
+	r.Country = firstJSONString(country.String)
+	r.TrackCount = int(trackCount.Int64)
+	return r, true
+}

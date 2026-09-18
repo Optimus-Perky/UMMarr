@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
@@ -172,7 +173,15 @@ func (s *MusicService) ChooseRelease(ctx context.Context, albumID int64, release
 	if strings.TrimSpace(releaseMBID) == "" {
 		return fmt.Errorf("pick a release")
 	}
-	if err := s.syncRelease(ctx, albumID, releaseMBID); err != nil {
+	releaseID, err := s.syncRelease(ctx, albumID, releaseMBID)
+	if err != nil {
+		return err
+	}
+	// The files have to come across before the tidy-up, or there is
+	// nothing to come across to: a release nothing is attached to counts
+	// as unfiled, so dropping the old releases first would drop the one
+	// just chosen and leave the album exactly where it started.
+	if _, err := s.carryFilesToRelease(ctx, albumID, releaseID); err != nil {
 		return err
 	}
 	if err := store.WithTx(ctx, s.DB, func(tx *sql.Tx) error {
@@ -184,6 +193,97 @@ func (s *MusicService) ChooseRelease(ctx context.Context, albumID int64, release
 		return err
 	}
 	return nil
+}
+
+// carryFilesToRelease moves an album's files onto the tracks of the
+// release just chosen, and reports how many made it.
+//
+// A file is placed by the MusicBrainz track id it carries, then by the
+// disc and track number it claims, and failing both by where it sat on
+// the release being left behind - the same order the scanner uses, with
+// the old position standing in for tags a file doesn't have. What nothing
+// places is left attached to nothing, which is what Manage Track Files
+// lists as waiting to be matched: a 16-track Japanese edition has three
+// tracks a UK CD simply does not, and inventing a home for them would be
+// worse than saying so.
+func (s *MusicService) carryFilesToRelease(ctx context.Context, albumID, releaseID int64) (int, error) {
+	files, err := store.AlbumAttachedFiles(ctx, s.DB, albumID)
+	if err != nil {
+		return 0, err
+	}
+	tracks, err := store.ReleaseTracks(ctx, s.DB, releaseID)
+	if err != nil {
+		return 0, err
+	}
+	index := newTrackIndex(tracks)
+
+	type move struct {
+		fileID  int64
+		trackID int64
+	}
+	var moves []move
+	var stranded []int64
+	taken := map[int64]bool{}
+	for _, f := range files {
+		if f.ReleaseID == releaseID {
+			// Already where it belongs, which is the ordinary case when
+			// the chosen release is the one in use.
+			taken[f.TrackID] = true
+			continue
+		}
+		track, how := store.TrackImportInfo{}, ""
+		if f.Tags != nil {
+			track, how = index.lookup(*f.Tags)
+		}
+		if how == "" {
+			// No usable tags: the disc and track it sat on before is the
+			// best thing left to go on.
+			if n, err := strconv.Atoi(strings.TrimSpace(f.Number)); err == nil {
+				track, how = index.byNumbers[[2]int{medium(f.Medium), n}], MatchNumbers
+			}
+		}
+		if track.ID == 0 || taken[track.ID] {
+			// Nowhere to go on the chosen release. The row goes, so the
+			// release being left behind is left holding nothing and can
+			// be dropped; the file on disk is untouched and shows up as
+			// waiting to be matched.
+			stranded = append(stranded, f.FileID)
+			continue
+		}
+		taken[track.ID] = true
+		moves = append(moves, move{fileID: f.FileID, trackID: track.ID})
+	}
+	if len(moves) == 0 && len(stranded) == 0 {
+		return 0, nil
+	}
+
+	err = store.WithTx(ctx, s.DB, func(tx *sql.Tx) error {
+		// Detach everything first, so a file landing on a track another
+		// file is leaving doesn't collide with it.
+		for _, m := range moves {
+			if _, err := tx.ExecContext(ctx, `UPDATE tracks SET track_file_id = NULL WHERE track_file_id = ?`, m.fileID); err != nil {
+				return fmt.Errorf("detach file %d: %w", m.fileID, err)
+			}
+		}
+		for _, m := range moves {
+			if _, err := tx.ExecContext(ctx, `UPDATE tracks SET track_file_id = ? WHERE id = ? AND track_file_id IS NULL`, m.fileID, m.trackID); err != nil {
+				return fmt.Errorf("attach file %d: %w", m.fileID, err)
+			}
+		}
+		for _, id := range stranded {
+			if _, err := tx.ExecContext(ctx, `UPDATE tracks SET track_file_id = NULL WHERE track_file_id = ?`, id); err != nil {
+				return fmt.Errorf("detach file %d: %w", id, err)
+			}
+			if _, err := tx.ExecContext(ctx, `DELETE FROM track_files WHERE id = ?`, id); err != nil {
+				return fmt.Errorf("drop file row %d: %w", id, err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return 0, err
+	}
+	return len(moves), nil
 }
 
 // ReleaseHint is what an album's own folder says about which release it is,

@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 )
 
@@ -511,4 +512,69 @@ func ResolveEpisodesFileName(ctx context.Context, q Queryer, episodeIDs []int64,
 		return "", err
 	}
 	return name + filepath.Ext(sourcePath), nil
+}
+
+// ReleaseTracks lists one specific release's tracks, in play order. It is
+// FindImportRelease's second half, for when the release is already known
+// rather than being chosen.
+func ReleaseTracks(ctx context.Context, q Queryer, releaseID int64) ([]TrackImportInfo, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT t.id, t.title, t.track_file_id IS NOT NULL, t.medium_number, t.track_number,
+		       COALESCE(t.musicbrainz_id, '')
+		FROM tracks t
+		WHERE t.album_release_id = ?
+		ORDER BY t.medium_number ASC, CAST(t.track_number AS INTEGER) ASC, t.track_number ASC`, releaseID)
+	if err != nil {
+		return nil, fmt.Errorf("list tracks for release %d: %w", releaseID, err)
+	}
+	defer rows.Close()
+	var tracks []TrackImportInfo
+	for rows.Next() {
+		var ti TrackImportInfo
+		if err := rows.Scan(&ti.ID, &ti.Title, &ti.HasFile, &ti.Medium, &ti.Number, &ti.MBID); err != nil {
+			return nil, fmt.Errorf("scan track import info: %w", err)
+		}
+		tracks = append(tracks, ti)
+	}
+	return tracks, rows.Err()
+}
+
+// AttachedTrackFile is one of an album's files and where it sits now: the
+// disc and track number of the track it is attached to, and the tags read
+// from it when it was scanned.
+type AttachedTrackFile struct {
+	FileID       int64
+	TrackID      int64
+	ReleaseID    int64
+	RelativePath string
+	Medium       int
+	Number       string
+	Tags         *mediainfo.AudioTags
+}
+
+// AlbumAttachedFiles lists every file attached to any release of an album.
+func AlbumAttachedFiles(ctx context.Context, q Queryer, albumID int64) ([]AttachedTrackFile, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT tf.id, t.id, ar.id, tf.relative_path, t.medium_number, t.track_number,
+		       COALESCE(tf.media_info, '{}')
+		FROM tracks t
+		JOIN track_files tf ON tf.id = t.track_file_id
+		JOIN album_releases ar ON ar.id = t.album_release_id
+		WHERE ar.album_id = ?
+		ORDER BY t.medium_number, CAST(t.track_number AS INTEGER), tf.id`, albumID)
+	if err != nil {
+		return nil, fmt.Errorf("list attached files for album %d: %w", albumID, err)
+	}
+	defer rows.Close()
+	var out []AttachedTrackFile
+	for rows.Next() {
+		var f AttachedTrackFile
+		var info string
+		if err := rows.Scan(&f.FileID, &f.TrackID, &f.ReleaseID, &f.RelativePath, &f.Medium, &f.Number, &info); err != nil {
+			return nil, err
+		}
+		f.Tags = mediainfo.Decode(info).Tags
+		out = append(out, f)
+	}
+	return out, rows.Err()
 }

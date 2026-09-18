@@ -38,7 +38,8 @@
       <div class="field"><span class="label">Artist</span>{{if $album.ArtistID.Valid}}<a href="/music/artists/{{$album.ArtistID.Int64}}/albums">{{$album.ArtistName}}</a>{{else}}{{$album.ArtistName}}{{end}}</div>
       {{if $album.Path.String}}<div class="field"><span class="label">Path</span>{{$album.Path.String}}</div>{{end}}
       {{if .QualityProfileName}}<div class="field"><span class="label">Quality Profile</span>{{.QualityProfileName}}</div>{{end}}
-      {{if not .Edition.Empty}}<div class="field"><span class="label">Edition</span>{{.Edition.Summary}}{{if .Edition.DiscogsURL}} <a href="{{.Edition.DiscogsURL}}" target="_blank" rel="noreferrer" title="This pressing on Discogs">Discogs</a>{{end}}</div>{{end}}
+      {{if .Release.Summary}}<div class="field"><span class="label">Release</span>{{.Release.Summary}}</div>{{end}}
+      {{if not .Edition.Empty}}<div class="field"><span class="label">Edition</span>{{.Edition.Summary}}{{if .Edition.DiscogsURL}} · <a href="{{.Edition.DiscogsURL}}" target="_blank" rel="noreferrer" title="This pressing on Discogs">Discogs</a>{{end}}</div>{{end}}
       {{if $album.Genres}}<div class="field"><span class="label">Genres</span>{{range $i, $g := $album.Genres}}{{if $i}}, {{end}}{{$g}}{{end}}</div>{{end}}
     </div>
     {{if $album.Overview.String}}<p class="detail-overview">{{$album.Overview.String}}</p>{{end}}
