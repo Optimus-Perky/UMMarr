@@ -141,6 +141,7 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("GET /music/albums/{id}/manage-tracks", h.AlbumManageTracksForm)
 	mux.HandleFunc("POST /music/albums/{id}/manage-tracks", h.AlbumManageTracksApply)
 	mux.HandleFunc("POST /music/albums/{id}/manage-tracks/delete", h.AlbumDeleteTrackFiles)
+	mux.HandleFunc("POST /music/albums/{id}/manage-tracks/attach", h.AlbumAttachTrackFile)
 	mux.HandleFunc("GET /music/albums/{id}/tracks/status", h.AlbumTrackStatuses)
 	mux.HandleFunc("GET /music/albums/{id}/tracks/{trackId}/releases", h.TrackReleases)
 	mux.HandleFunc("POST /music/albums/{id}/tracks/{trackId}/grab", h.TrackGrab)

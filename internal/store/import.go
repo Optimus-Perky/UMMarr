@@ -261,6 +261,13 @@ type TrackImportInfo struct {
 	ID      int64
 	Title   string
 	HasFile bool // track_file_id IS NOT NULL - used by ScanMusicLibrary to skip partially-imported releases
+	// MBID, Medium and Number are what a tagged file is matched against:
+	// its MUSICBRAINZ_RELEASETRACKID, or failing that the disc and track
+	// number it claims. Empty MBID means this track was synced before
+	// UMMarr stored them - a metadata refresh fills it in.
+	MBID   string
+	Medium int
+	Number string
 }
 
 // FindImportRelease resolves which album_releases row to import
@@ -299,17 +306,19 @@ func FindImportRelease(ctx context.Context, q Queryer, albumID int64) (releaseID
 	}
 
 	rows, err := q.QueryContext(ctx, `
-		SELECT id, title, track_file_id IS NOT NULL FROM tracks
-		WHERE album_release_id = ?
-		ORDER BY medium_number ASC, track_number ASC
-	`, releaseID)
+		SELECT t.id, t.title, t.track_file_id IS NOT NULL, t.medium_number, t.track_number,
+		       COALESCE(t.musicbrainz_id, '')
+		FROM tracks t
+		WHERE t.album_release_id = ?
+		ORDER BY t.medium_number ASC, t.track_number ASC
+`, releaseID)
 	if err != nil {
 		return 0, nil, fmt.Errorf("list tracks for release %d: %w", releaseID, err)
 	}
 	defer rows.Close()
 	for rows.Next() {
 		var ti TrackImportInfo
-		if err := rows.Scan(&ti.ID, &ti.Title, &ti.HasFile); err != nil {
+		if err := rows.Scan(&ti.ID, &ti.Title, &ti.HasFile, &ti.Medium, &ti.Number, &ti.MBID); err != nil {
 			return 0, nil, fmt.Errorf("scan track import info: %w", err)
 		}
 		tracks = append(tracks, ti)

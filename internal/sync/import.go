@@ -12,6 +12,7 @@ import (
 	gosync "sync"
 
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
+	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/nfo"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
@@ -36,6 +37,11 @@ type ImportService struct {
 	// Metadata writes Kodi/Emby .nfo files and images beside imported files
 	// (nil writes nothing).
 	Metadata *nfo.Writer
+	// Probe reads a file with FFprobe, so a music file can be matched on
+	// the MusicBrainz ids and disc/track numbers it carries rather than on
+	// its position in the folder (see track_match.go). Nil falls back to
+	// position, as UMMarr did before tags were read.
+	Probe func(context.Context, string) (mediainfo.Info, error)
 
 	mu      gosync.Mutex
 	runMu   gosync.Mutex             // one library import at a time
@@ -293,14 +299,14 @@ func (s *ImportService) importAlbum(ctx context.Context, albumID int64, files []
 	}
 	opts := importOptions(ms)
 
-	n := len(audioFiles)
-	if len(tracks) < n {
-		n = len(tracks)
-	}
+	// A download is a known release whose files usually arrive in order, so
+	// position stays available as the last resort here (unlike a library
+	// scan - see scanAlbumFolder).
+	matches, matchReport := s.MatchTracks(ctx, savePath, audioFiles, tracks, true)
 
 	imported := 0
-	for i := 0; i < n; i++ {
-		file, track := audioFiles[i], tracks[i]
+	for _, match := range matches {
+		file, track := match.File, match.Track
 
 		name, err := store.ResolveTrackFileName(ctx, s.DB, track.ID, file.Path)
 		if err != nil {
@@ -330,12 +336,12 @@ func (s *ImportService) importAlbum(ctx context.Context, albumID int64, files []
 		return "import_failed", "failed to import any tracks"
 	}
 	importExtras(ms, files, audioFiles[0], savePath, folder, "", extrasKeepNames)
-	if len(audioFiles) != len(tracks) {
-		return "imported", fmt.Sprintf("imported %d track(s) from release %d (positional match: %d audio files vs %d expected tracks)",
-			imported, releaseID, len(audioFiles), len(tracks))
+	message := fmt.Sprintf("imported %d track(s) from release %d", imported, releaseID)
+	if summary := matchReport.Summary(); summary != "" {
+		message += " (" + summary + ")"
 	}
 	s.writeMetadata(func() error { return s.Metadata.WriteAlbum(ctx, albumID) })
-	return "imported", fmt.Sprintf("imported %d track(s) from release %d", imported, releaseID)
+	return "imported", message
 }
 
 // importTrack imports the single largest audio file in the download as
@@ -878,13 +884,15 @@ func (s *ImportService) scanAlbumFolder(ctx context.Context, ms store.MediaSetti
 		return 0
 	}
 	audioFiles := importer.AudioFilesSorted(files)
-	n := len(audioFiles)
-	if len(tracks) < n {
-		n = len(tracks)
-	}
+	// No positional fallback on a scan: these are files someone has kept
+	// for years, and attaching one to whichever track happened to line up
+	// writes a wrong answer into the library. A file nothing identifies is
+	// left where it is, and Manage Track Files lists it to be matched by
+	// hand.
+	matches, _ := s.MatchTracks(ctx, dir, audioFiles, tracks, false)
 	perms := permissions(ms)
-	for i := 0; i < n; i++ {
-		file, track := audioFiles[i], tracks[i]
+	for _, match := range matches {
+		file, track := match.File, match.Track
 		name := file.Path
 		src := filepath.Join(dir, file.Path)
 		dest := src

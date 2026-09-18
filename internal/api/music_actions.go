@@ -286,6 +286,14 @@ type manageTracksData struct {
 	Album  store.AlbumDetail
 	Files  []trackFileView
 	Tracks []store.TrackDetail
+	// Unmatched are audio files in the album folder that no track claims -
+	// what a scan left alone because nothing identified them.
+	Unmatched []unmatchedFileView
+}
+
+type unmatchedFileView struct {
+	Path      string
+	SizeHuman string
 }
 
 // AlbumManageTracksForm is Manage Track Files: every file the album has,
@@ -316,7 +324,39 @@ func (h *handler) AlbumManageTracksForm(w http.ResponseWriter, r *http.Request) 
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	h.renderPartial(w, "album_manage_tracks", manageTracksData{Album: album, Files: views, Tracks: tracks})
+	data := manageTracksData{Album: album, Files: views, Tracks: tracks}
+	if h.deps.Import != nil {
+		if loose, err := h.deps.Import.UnmatchedAlbumFiles(ctx, albumID); err == nil {
+			for _, f := range loose {
+				data.Unmatched = append(data.Unmatched, unmatchedFileView{Path: f.Path, SizeHuman: humanizeBytes(f.Size)})
+			}
+		}
+	}
+	h.renderPartial(w, "album_manage_tracks", data)
+}
+
+// AlbumAttachTrackFile matches one of the album folder's unclaimed files to
+// a track by hand, leaving the file where it is on disk.
+func (h *handler) AlbumAttachTrackFile(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	trackID, err := strconv.ParseInt(r.FormValue("track_id"), 10, 64)
+	if err != nil {
+		renderInlineError(w, "Pick a track.")
+		return
+	}
+	if err := h.deps.Import.AttachAlbumFile(r.Context(), albumID, trackID, r.FormValue("path")); err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albums/%d?matched=1", albumID))
+	w.WriteHeader(http.StatusOK)
 }
 
 // AlbumManageTracksApply re-maps files whose track select was changed.

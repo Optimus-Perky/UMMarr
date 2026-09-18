@@ -65,6 +65,7 @@ func adaptMusicBrainzRelease(r *musicbrainz.Release) (releaseSource, []metadata.
 		src.TrackCount += medium.TrackCount
 		for _, t := range medium.Tracks {
 			track := metadata.TrackSource{
+				MBID:         t.ID,
 				Number:       t.Number,
 				Title:        t.Title,
 				DurationMs:   t.Length,

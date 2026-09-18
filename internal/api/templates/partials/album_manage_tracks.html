@@ -9,7 +9,7 @@
     {{if .Files}}
     <p class="notice">Albums match their files by position, so one missing track in a rip shifts every file after it onto the wrong title. Point a file at the right track here, or tick files to delete them.</p>
     <table class="data-table">
-      <thead><tr><th></th><th>File</th><th>Size</th><th>Audio</th><th>Track</th></tr></thead>
+      <thead><tr><th></th><th>File</th><th>Size</th><th>Audio</th><th>Tagged as</th><th>Track</th></tr></thead>
       <tbody>
         {{range .Files}}
         <tr>
@@ -17,6 +17,14 @@
           <td class="wrap">{{.RelativePath}}</td>
           <td class="nowrap">{{.SizeHuman}}</td>
           <td class="nowrap">{{if .Audio}}{{.Audio}}{{else}}<span class="setting-help">not analyzed</span>{{end}}</td>
+          <td class="wrap">
+            {{with .Tags}}
+              {{if .DiscNumber}}<span class="chip chip-muted">Disc {{.DiscNumber}}{{if .DiscTotal}} of {{.DiscTotal}}{{end}}</span> {{end}}
+              {{if .TrackNumber}}<span class="chip chip-muted">Track {{.TrackNumber}}</span> {{end}}
+              {{if .Title}}{{.Title}}{{end}}
+              {{if .HasMusicBrainz}}<span class="chip chip-good" title="This file carries its own MusicBrainz ids, so it doesn't have to be matched by position">MusicBrainz</span>{{end}}
+            {{else}}<span class="setting-help">no tags</span>{{end}}
+          </td>
           <td>
             <select name="f{{.ID}}_track">
               {{$current := .TrackID}}
@@ -29,6 +37,32 @@
     </table>
     {{else}}
     <p class="notice">This album has no files yet.</p>
+    {{end}}
+    {{if .Unmatched}}
+    <h3 style="margin-top:16px">Waiting to be matched</h3>
+    <p class="notice">These files are in the album's folder but nothing identified them - they have no MusicBrainz tags and no disc/track number UMMarr could use, so a scan left them alone rather than attaching them to a guess. Pick the track each one belongs to.</p>
+    <table class="data-table">
+      <thead><tr><th>File</th><th>Size</th><th>Track</th><th></th></tr></thead>
+      <tbody>
+        {{range .Unmatched}}
+        <tr>
+          <td class="wrap">{{.Path}}</td>
+          <td class="nowrap">{{.SizeHuman}}</td>
+          <td>
+            <select name="track_id" form="attach-{{.Path}}">
+              {{range $.Tracks}}<option value="{{.ID}}">{{.TrackNumber}} - {{.Title}}</option>{{end}}
+            </select>
+          </td>
+          <td>
+            <form id="attach-{{.Path}}" hx-post="/music/albums/{{$album.ID}}/manage-tracks/attach" hx-target="#manage-tracks-result" hx-swap="innerHTML" style="display:inline">
+              <input type="hidden" name="path" value="{{.Path}}">
+              <button class="btn btn-sm" type="submit">Match</button>
+            </form>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
     {{end}}
     <div id="manage-tracks-result"></div>
   </div>

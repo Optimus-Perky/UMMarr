@@ -263,3 +263,59 @@ func mustRel(t *testing.T, base, path string) string {
 	}
 	return rel
 }
+
+// The other half of Mark's rule: a file a scan couldn't identify is offered
+// for manual matching, and matching it by hand attaches it where it lies.
+func TestUnmatchedAlbumFiles_ListsAndAttachesByHand(t *testing.T) {
+	db := openTestDB(t)
+	_, albumID, _ := importedAlbum(t, db)
+	ctx := context.Background()
+	svc := &ImportService{DB: db, Events: &Events{DB: db}}
+	albumPath, _ := store.AlbumFolderPath(ctx, db, albumID)
+
+	// Nothing loose to begin with.
+	loose, err := svc.UnmatchedAlbumFiles(ctx, albumID)
+	if err != nil || len(loose) != 0 {
+		t.Fatalf("want no unmatched files in a fully imported album, got %+v (%v)", loose, err)
+	}
+
+	// Detach one file's row, as a scan that refused to guess would leave it.
+	refs, _ := store.ListTrackFilesForAlbum(ctx, db, albumID)
+	orphan := refs[0]
+	if _, err := db.ExecContext(ctx, `UPDATE tracks SET track_file_id = NULL WHERE track_file_id = ?`, orphan.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `DELETE FROM track_files WHERE id = ?`, orphan.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	loose, err = svc.UnmatchedAlbumFiles(ctx, albumID)
+	if err != nil || len(loose) != 1 || loose[0].Path != orphan.RelativePath {
+		t.Fatalf("want the detached file offered for matching, got %+v (%v)", loose, err)
+	}
+
+	// Match it to a track that has no file.
+	_, tracks, _ := store.FindImportRelease(ctx, db, albumID)
+	var free int64
+	for _, tr := range tracks {
+		if !tr.HasFile {
+			free = tr.ID
+		}
+	}
+	if free == 0 {
+		t.Fatal("want a track with no file to match against")
+	}
+	if err := svc.AttachAlbumFile(ctx, albumID, free, orphan.RelativePath); err != nil {
+		t.Fatalf("attach: %v", err)
+	}
+	if loose, _ := svc.UnmatchedAlbumFiles(ctx, albumID); len(loose) != 0 {
+		t.Errorf("want nothing left unmatched, got %+v", loose)
+	}
+	if _, err := os.Stat(filepath.Join(albumPath, orphan.RelativePath)); err != nil {
+		t.Errorf("want the file left where it was: %v", err)
+	}
+	// A file that isn't actually loose can't be attached.
+	if err := svc.AttachAlbumFile(ctx, albumID, free, "nothing.flac"); err == nil {
+		t.Error("want an unknown file refused")
+	}
+}

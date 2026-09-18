@@ -333,9 +333,13 @@ func UpsertTrack(ctx context.Context, q Queryer, releaseID, artistMetadataID int
 		SELECT id FROM tracks WHERE album_release_id = ? AND medium_number = ? AND track_number = ?
 	`, releaseID, t.MediumNumber, t.Number).Scan(&existingID)
 	if err == nil {
+		// A blank MBID leaves the stored one alone: tracks synced before
+		// UMMarr read them fill in on a refresh, and never blank out.
 		_, err = q.ExecContext(ctx, `
-			UPDATE tracks SET artist_metadata_id = ?, title = ?, duration_ms = ? WHERE id = ?
-		`, artistMetadataID, t.Title, t.DurationMs, existingID)
+			UPDATE tracks SET artist_metadata_id = ?, title = ?, duration_ms = ?,
+			                  musicbrainz_id = COALESCE(NULLIF(?, ''), musicbrainz_id)
+			WHERE id = ?
+		`, artistMetadataID, t.Title, t.DurationMs, t.MBID, existingID)
 		if err != nil {
 			return 0, fmt.Errorf("update track: %w", err)
 		}
@@ -346,9 +350,9 @@ func UpsertTrack(ctx context.Context, q Queryer, releaseID, artistMetadataID int
 	}
 
 	res, err := q.ExecContext(ctx, `
-		INSERT INTO tracks (album_release_id, artist_metadata_id, track_number, medium_number, title, duration_ms)
-		VALUES (?, ?, ?, ?, ?, ?)
-	`, releaseID, artistMetadataID, t.Number, t.MediumNumber, t.Title, t.DurationMs)
+		INSERT INTO tracks (album_release_id, artist_metadata_id, track_number, medium_number, title, duration_ms, musicbrainz_id)
+		VALUES (?, ?, ?, ?, ?, ?, NULLIF(?, ''))
+	`, releaseID, artistMetadataID, t.Number, t.MediumNumber, t.Title, t.DurationMs, t.MBID)
 	if err != nil {
 		return 0, fmt.Errorf("insert track: %w", err)
 	}

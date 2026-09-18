@@ -37,6 +37,9 @@ type TrackFileDetail struct {
 	// Quality is the recorded catalog key, kept only so a file imported
 	// from a tagged release still shows what it was grabbed as.
 	Quality string
+	// Tags is what the file says about itself, when it has been analyzed:
+	// the disc and track it claims, and its MusicBrainz ids.
+	Tags *mediainfo.AudioTags
 }
 
 // ListTrackFileDetails lists every track file of an album, in track order.
@@ -65,7 +68,8 @@ func ListTrackFileDetails(ctx context.Context, q Queryer, albumID int64) ([]Trac
 		if key := fq.Key(); key != "Unknown" {
 			f.Quality = key
 		}
-		f.Audio = mediainfo.Decode(info).TrackSummary()
+		parsed := mediainfo.Decode(info)
+		f.Audio, f.Tags = parsed.TrackSummary(), parsed.Tags
 		files = append(files, f)
 	}
 	return files, rows.Err()
@@ -93,4 +97,17 @@ func RemapTrackFile(ctx context.Context, q Queryer, albumID, fileID, trackID int
 		return fmt.Errorf("attach file %d to track %d: %w", fileID, trackID, err)
 	}
 	return nil
+}
+
+// FindTrackOnAlbum checks a track belongs to an album, returning its title.
+func FindTrackOnAlbum(ctx context.Context, q Queryer, albumID, trackID int64) (string, error) {
+	var title string
+	err := q.QueryRowContext(ctx, `
+		SELECT t.title FROM tracks t
+		JOIN album_releases ar ON ar.id = t.album_release_id
+		WHERE t.id = ? AND ar.album_id = ?`, trackID, albumID).Scan(&title)
+	if err != nil {
+		return "", fmt.Errorf("track %d isn't on album %d", trackID, albumID)
+	}
+	return title, nil
 }

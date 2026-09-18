@@ -15,7 +15,8 @@ import (
 )
 
 // Schema is bumped when Info gains fields worth re-reading files for.
-const Schema = 1
+// 2 added Tags, so music files are re-read for their MusicBrainz ids.
+const Schema = 2
 
 // Where an Info came from.
 const (
@@ -58,6 +59,9 @@ type Info struct {
 	AudioStreamCount   int      `json:"audioStreams,omitempty"`
 	AudioLanguages     []string `json:"audioLanguages,omitempty"` // ISO 639-2, e.g. eng
 	Subtitles          []string `json:"subtitles,omitempty"`
+	// Tags is what a music file says about itself (see tags.go). Only set
+	// for audio files that carry any.
+	Tags *AudioTags `json:"tags,omitempty"`
 }
 
 // Decode reads a stored media_info value; "" and "{}" give the zero Info.

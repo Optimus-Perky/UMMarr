@@ -57,6 +57,9 @@ func ParseFFprobe(data []byte) (Info, error) {
 	info.Container = containerName(out.Format.FormatName)
 	info.RunTimeSeconds, _ = strconv.ParseFloat(out.Format.Duration, 64)
 	info.OverallBitrate, _ = strconv.ParseInt(out.Format.BitRate, 10, 64)
+	if tags := ParseAudioTags(out.Format.Tags); !tags.Empty() {
+		info.Tags = &tags
+	}
 
 	var video, audio *probeStream
 	for n := range out.Streams {

@@ -78,6 +78,10 @@ type ArtistCreditRef struct {
 // merged shape: there's only ever one data source per track today (no
 // competing providers to reconcile), just a 1:1 passthrough list.
 type TrackSource struct {
+	// MBID is the track id MusicBrainz gives this track ON THIS RELEASE -
+	// what Picard writes into a file as MUSICBRAINZ_RELEASETRACKID, so a
+	// tagged file can be matched to its exact track instead of by position.
+	MBID          string
 	Number        string
 	Title         string
 	DurationMs    int

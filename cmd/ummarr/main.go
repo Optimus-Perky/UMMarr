@@ -263,7 +263,7 @@ func main() {
 				}
 				return sync.FilePermissions(ms)
 			}}
-			importService := &sync.ImportService{DB: db, Movies: movieService, Series: seriesService, Music: musicService, Events: events, Metadata: metadataWriter}
+			importService := &sync.ImportService{DB: db, Movies: movieService, Series: seriesService, Music: musicService, Events: events, Metadata: metadataWriter, Probe: probe}
 			downloadService := &sync.DownloadService{
 				DB: db, Import: importService, UserAgent: cfg.UserAgent, Events: events,
 				Indexers:               indexerService,
