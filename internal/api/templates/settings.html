@@ -30,6 +30,33 @@
       <div id="api-key-result"></div>
     </div>
   </div>
+  <div class="setting-row">
+    <div class="setting-label">Access keys</div>
+    <div class="setting-control">
+      <span class="setting-help">Extra keys for a tool that needs to reach UMMarr - these authenticate the pages as well as the API, and each is revoked on its own, so removing one leaves the API key above (and Prowlarr) alone. Treat one as a login: anything holding it can change the library.</span>
+      {{if .AccessKeys}}
+      <table class="settings-table" style="margin-top:8px">
+        <thead><tr><th>Name</th><th>Key</th><th>Created</th><th>Last used</th><th></th></tr></thead>
+        <tbody>
+          {{range .AccessKeys}}
+          <tr>
+            <td>{{.Name}}</td>
+            <td><code class="access-key" style="user-select:all">{{.Key}}</code></td>
+            <td class="nowrap">{{.CreatedText}}</td>
+            <td class="nowrap">{{if .LastUsedText}}{{.LastUsedText}}{{else}}<span class="setting-help">never</span>{{end}}</td>
+            <td><button class="btn btn-sm btn-danger" hx-delete="/settings/access-keys/{{.ID}}" hx-target="#access-key-result" hx-swap="innerHTML" hx-confirm="Revoke the access key {{.Name}}? Anything using it stops working immediately.">Revoke</button></td>
+          </tr>
+          {{end}}
+        </tbody>
+      </table>
+      {{end}}
+      <div id="access-key-result"></div>
+      <form class="form-row" style="margin-top:8px" hx-post="/settings/access-keys" hx-target="#access-key-result" hx-swap="innerHTML">
+        <input type="text" name="name" placeholder="e.g. Claude" required>
+        <button class="btn btn-sm" type="submit">Create access key</button>
+      </form>
+    </div>
+  </div>
 </div>
 
 <div class="panel" data-section="host" id="host">

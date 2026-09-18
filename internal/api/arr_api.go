@@ -62,6 +62,11 @@ func (h *handler) arrAuthorized(r *http.Request) bool {
 			subtle.ConstantTimeCompare([]byte(given), []byte(key)) == 1 {
 			return true
 		}
+		// A named access key works here too, so one key covers both the
+		// API and the pages.
+		if store.ValidAccessKey(r.Context(), h.deps.DB, given) {
+			return true
+		}
 	}
 	if h.deps.SessionCipher != nil {
 		if cookie, err := r.Cookie(sessionCookieName); err == nil && h.deps.SessionCipher.Verify(cookie.Value) == nil {

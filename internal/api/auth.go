@@ -107,6 +107,13 @@ func (h *handler) requireAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
+		// A named access key stands in for a session, so a tool can fetch
+		// a page rather than only the API (Settings -> General -> Security).
+		// Each is revocable on its own, unlike the key Prowlarr syncs with.
+		if store.ValidAccessKey(r.Context(), h.deps.DB, requestKey(r)) {
+			next.ServeHTTP(w, r)
+			return
+		}
 		if r.Header.Get("HX-Request") == "true" {
 			w.Header().Set("HX-Redirect", "/login")
 			w.WriteHeader(http.StatusOK)
@@ -114,6 +121,16 @@ func (h *handler) requireAuth(next http.Handler) http.Handler {
 		}
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	})
+}
+
+// requestKey is the key a request carries, by header or query parameter -
+// the header for anything that can set one, the query for an <img> or a
+// link that cannot.
+func requestKey(r *http.Request) string {
+	if key := r.Header.Get("X-Api-Key"); key != "" {
+		return key
+	}
+	return r.URL.Query().Get("apikey")
 }
 
 func isAuthExempt(r *http.Request) bool {

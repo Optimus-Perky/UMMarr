@@ -74,6 +74,7 @@ type settingsPageData struct {
 	RSSSyncRunning   bool
 
 	AuthUsername string
+	AccessKeys   []accessKeyView
 
 	DownloadClients  []downloadClientView
 	DownloadHandling store.DownloadHandling
@@ -193,6 +194,7 @@ func (h *handler) loadSettingsPage(ctx context.Context) (settingsPageData, error
 		IndexerOptions:  indexerOptions,
 
 		AuthUsername: authUsername,
+		AccessKeys:   accessKeyViews(ctx, h.deps.DB),
 
 		DownloadClients:  downloadClients,
 		DownloadHandling: downloadHandling,
@@ -748,4 +750,60 @@ func profilesOfKind(all []store.QualityProfile, kind string) []store.QualityProf
 		}
 	}
 	return out
+}
+
+// CreateAccessKey issues a named key for a tool: it authenticates the API
+// and the pages, and is revoked on its own without disturbing the key
+// Prowlarr's app sync uses.
+func (h *handler) CreateAccessKey(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	if _, err := store.CreateAccessKey(r.Context(), h.deps.DB, r.FormValue("name")); err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	w.Header().Set("HX-Redirect", "/settings/general")
+	w.WriteHeader(http.StatusOK)
+}
+
+// DeleteAccessKey revokes one.
+func (h *handler) DeleteAccessKey(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid access key id", http.StatusBadRequest)
+		return
+	}
+	if err := store.DeleteAccessKey(r.Context(), h.deps.DB, id); err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	w.Header().Set("HX-Redirect", "/settings/general")
+	w.WriteHeader(http.StatusOK)
+}
+
+// accessKeyView is one issued key as Settings shows it: the key itself,
+// because the whole point is to hand it to something, plus when it was
+// made and last used so a forgotten one is obvious.
+type accessKeyView struct {
+	store.AccessKey
+	CreatedText  string
+	LastUsedText string
+}
+
+func accessKeyViews(ctx context.Context, db store.Queryer) []accessKeyView {
+	keys, err := store.ListAccessKeys(ctx, db)
+	if err != nil {
+		return nil
+	}
+	views := make([]accessKeyView, 0, len(keys))
+	for _, k := range keys {
+		view := accessKeyView{AccessKey: k, CreatedText: k.Created.Local().Format("2 Jan 2006")}
+		if k.LastUsed != nil {
+			view.LastUsedText = k.LastUsed.Local().Format("2 Jan 15:04")
+		}
+		views = append(views, view)
+	}
+	return views
 }

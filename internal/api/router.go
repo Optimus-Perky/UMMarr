@@ -183,6 +183,8 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /settings/quality-profiles/{id}/items", h.UpdateQualityProfileItems)
 	mux.HandleFunc("POST /settings/quality-profiles/{id}/default", h.SetDefaultQualityProfile)
 	mux.HandleFunc("DELETE /settings/quality-profiles/{id}", h.DeleteQualityProfile)
+	mux.HandleFunc("POST /settings/access-keys", h.CreateAccessKey)
+	mux.HandleFunc("DELETE /settings/access-keys/{id}", h.DeleteAccessKey)
 	mux.HandleFunc("POST /settings/preferred-words", h.CreatePreferredWord)
 	mux.HandleFunc("POST /settings/preferred-words/{id}", h.UpdatePreferredWord)
 	mux.HandleFunc("DELETE /settings/preferred-words/{id}", h.DeletePreferredWord)
