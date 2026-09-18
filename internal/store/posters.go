@@ -106,8 +106,59 @@ func CoverFile(ctx context.Context, q Queryer, kind string, id int64) (string, e
 	if err := q.QueryRowContext(ctx, `SELECT COALESCE(path, ''), COALESCE(cover_path, '') FROM `+table+` WHERE id = ?`, id).Scan(&folder, &cover); err != nil {
 		return "", err
 	}
-	if folder == "" || cover == "" {
-		return "", nil
+	if folder != "" && cover != "" {
+		return filepath.Join(folder, cover), nil
 	}
-	return filepath.Join(folder, cover), nil
+	// Nothing in the folder: a cover fetched from a provider, kept in
+	// UMMarr's own directory, stands in.
+	if kind == "album" {
+		var cached string
+		_ = q.QueryRowContext(ctx, `SELECT COALESCE(cover_cache, '') FROM albums WHERE id = ?`, id).Scan(&cached)
+		if cached != "" {
+			return cached, nil
+		}
+	}
+	return "", nil
+}
+
+// SetCachedCover records a cover fetched from a provider: an absolute path
+// in UMMarr's own folder, and which provider it came from.
+func SetCachedCover(ctx context.Context, q Queryer, albumID int64, file, source string) error {
+	if _, err := q.ExecContext(ctx, `UPDATE albums SET cover_cache = NULLIF(?, ''), cover_source = NULLIF(?, '') WHERE id = ?`, file, source, albumID); err != nil {
+		return fmt.Errorf("record cached cover for album %d: %w", albumID, err)
+	}
+	return nil
+}
+
+// AlbumsWithoutCover lists albums that have no artwork at all - neither a
+// file in their folder nor one fetched before - with what to search for.
+func AlbumsWithoutCover(ctx context.Context, q Queryer) ([]AlbumCoverCandidate, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT al.id, am.name, al.title, COALESCE(CAST(strftime('%Y', al.release_date) AS INTEGER), 0)
+		FROM albums al JOIN artist_metadata am ON am.id = al.artist_metadata_id
+		WHERE al.cover_path IS NULL AND al.cover_cache IS NULL
+		  AND EXISTS (SELECT 1 FROM album_releases r JOIN tracks t ON t.album_release_id = r.id
+		              WHERE r.album_id = al.id AND t.track_file_id IS NOT NULL)
+		ORDER BY am.sort_name, al.title`)
+	if err != nil {
+		return nil, fmt.Errorf("list albums without cover: %w", err)
+	}
+	defer rows.Close()
+	var out []AlbumCoverCandidate
+	for rows.Next() {
+		var c AlbumCoverCandidate
+		if err := rows.Scan(&c.AlbumID, &c.Artist, &c.Album, &c.Year); err != nil {
+			return nil, err
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
+}
+
+// AlbumCoverCandidate is an album with no artwork, and what to look for.
+type AlbumCoverCandidate struct {
+	AlbumID int64
+	Artist  string
+	Album   string
+	Year    int
 }

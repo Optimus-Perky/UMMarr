@@ -190,6 +190,34 @@ func main() {
 	renamePreview.Flags().BoolVar(&renameAll, "all", false, "list every file rather than three per artist")
 	root.AddCommand(renamePreview)
 
+	var coverLimit int
+	fetchCovers := &cobra.Command{
+		Use:   "fetch-covers",
+		Short: "Look up albums with no cover art on Discogs and keep the artwork",
+		Long: "Albums whose folder holds no artwork are searched for on Discogs, and the\n" +
+			"front cover of the matching release is kept in UMMarr's own folder. Nothing\n" +
+			"is written into the music library. Discogs answers 25 requests a minute\n" +
+			"without a token, and each album costs up to two.",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := store.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			cfg := config.Load()
+			client := sync.DiscogsFromSettings(cmd.Context(), db, cfg.UserAgent)
+			if client == nil {
+				return fmt.Errorf("enable Discogs under Settings, Metadata first")
+			}
+			fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: filepath.Join(filepath.Dir(dbPath), "artwork")}
+			report, err := fetcher.FetchMissingCovers(cmd.Context(), coverLimit)
+			fmt.Println(report.Summary())
+			return err
+		},
+	}
+	fetchCovers.Flags().IntVar(&coverLimit, "limit", 0, "stop after this many albums (0 for all)")
+	root.AddCommand(fetchCovers)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "artwork",
 		Short: "Import the cover art already sitting in the library folders",
@@ -419,6 +447,19 @@ func main() {
 				Run: func(ctx context.Context) error {
 					report, err := sync.RefreshLibrary(ctx, movieService, seriesService)
 					log.Printf("refresh metadata: %s", report.Summary())
+					return err
+				}})
+			artworkDir := filepath.Join(filepath.Dir(dbPath), "artwork")
+			scheduler.Register(&tasks.Task{Name: "Fetch missing artwork",
+				Description: "Looks up albums with no cover in their folder on Discogs and keeps the artwork in UMMarr's own folder - nothing is written into the music library. Needs Discogs enabled under Settings -> Metadata.",
+				Run: func(ctx context.Context) error {
+					client := sync.DiscogsFromSettings(ctx, db, cfg.UserAgent)
+					if client == nil {
+						return nil // not enabled: nothing to do, not an error
+					}
+					fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: artworkDir}
+					report, err := fetcher.FetchMissingCovers(ctx, 0)
+					log.Printf("fetch missing artwork: %s", report.Summary())
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Import artwork",
