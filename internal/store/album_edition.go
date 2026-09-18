@@ -260,8 +260,33 @@ func GetCurrentRelease(ctx context.Context, q Queryer, albumID int64) (CurrentRe
 	if err != nil {
 		return CurrentRelease{}, false
 	}
-	r.Disambiguation, r.Date = disambiguation.String, date.String
-	r.Country = firstJSONString(country.String)
+	r.Disambiguation, r.Date = disambiguation.String, shortDate(date.String)
+	r.Country = countryName(firstJSONString(country.String))
 	r.TrackCount = int(trackCount.Int64)
 	return r, true
+}
+
+// shortDate keeps the day and drops the time. The column is a DATE, but
+// SQLite hands back whatever was written into it, which for a release
+// synced from MusicBrainz is a full timestamp nobody wants to read.
+func shortDate(raw string) string {
+	if len(raw) >= 10 {
+		return raw[:10]
+	}
+	return raw
+}
+
+// countryName spells out the codes MusicBrainz uses that are not
+// countries. The real ISO ones - GB, US, JP - are left alone: they are
+// short, and everyone reading an album page knows them.
+func countryName(code string) string {
+	switch code {
+	case "XW":
+		return "Worldwide"
+	case "XE":
+		return "Europe"
+	case "XU":
+		return "[Unknown]"
+	}
+	return code
 }
