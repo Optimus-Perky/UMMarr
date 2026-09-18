@@ -54,7 +54,10 @@ type releaseResultsData struct {
 	// starts on season packs, as Sonarr does.
 	DefaultFilter string
 	Results       []releaseResultView
-	GrabURL       string
+	// Audio hides the columns that describe video: a music release has no
+	// release group worth showing, and the quality is its format.
+	Audio   bool
+	GrabURL string
 	// IndexerErrors are the indexers that failed; the rest still show
 	// their results.
 	IndexerErrors []sync.IndexerError
@@ -162,7 +165,8 @@ func (h *handler) renderReleaseResults(w http.ResponseWriter, r *http.Request, d
 }
 
 func (h *handler) renderReleaseResultsFiltered(w http.ResponseWriter, r *http.Request, dialog dialogInfo, defaultFilter, grabURL string, result sync.SearchResult, judge func(*decision.Engine) []decision.Decision) {
-	data := releaseResultsData{dialogInfo: dialog, DefaultFilter: defaultFilter, GrabURL: grabURL, IndexerErrors: result.Errors}
+	data := releaseResultsData{dialogInfo: dialog, DefaultFilter: defaultFilter, GrabURL: grabURL, IndexerErrors: result.Errors,
+		Audio: strings.HasPrefix(r.URL.Path, "/music/")}
 	if result.Searched == 0 && len(result.Errors) == 0 {
 		data.Err = sync.ErrNoIndexers.Error()
 	}

@@ -111,3 +111,37 @@ func FindTrackOnAlbum(ctx context.Context, q Queryer, albumID, trackID int64) (s
 	}
 	return title, nil
 }
+
+// TrackFileWithInfo is a track file whose recorded quality says nothing,
+// paired with what its analysis found - enough to work the quality out
+// without touching the file again.
+type TrackFileWithInfo struct {
+	ID   int64
+	Info mediainfo.Info
+}
+
+// TrackFilesNeedingQuality lists analyzed track files whose quality is
+// still empty, which is every file analyzed before UMMarr knew about
+// audio formats.
+func TrackFilesNeedingQuality(ctx context.Context, q Queryer) ([]TrackFileWithInfo, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT id, media_info FROM track_files
+		WHERE json_valid(media_info)
+		  AND json_extract(media_info, '$.schema') IS NOT NULL
+		  AND COALESCE(json_extract(COALESCE(NULLIF(quality, ''), '{}'), '$.audio'), '') = ''`)
+	if err != nil {
+		return nil, fmt.Errorf("list track files needing quality: %w", err)
+	}
+	defer rows.Close()
+	var out []TrackFileWithInfo
+	for rows.Next() {
+		var f TrackFileWithInfo
+		var raw string
+		if err := rows.Scan(&f.ID, &raw); err != nil {
+			return nil, err
+		}
+		f.Info = mediainfo.Decode(raw)
+		out = append(out, f)
+	}
+	return out, rows.Err()
+}

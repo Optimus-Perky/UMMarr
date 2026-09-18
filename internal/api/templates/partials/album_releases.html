@@ -8,6 +8,9 @@
   <div class="guide-body">
     {{if .Err}}<p class="indexer-test failed">{{.Err}}</p>{{else}}
     <p class="notice">One album, many pressings: a UK CD with 13 tracks and a Japanese one with 16 are different releases of the same album. Pick the one you actually have - the tracks UMMarr expects, and so what counts as missing, come from it.</p>
+    {{if .Stray}}
+    <p class="indexer-test failed">{{.Stray}} of this album&#39;s files name a release that is not one of these, so the album itself is probably matched to the wrong thing - MusicBrainz lists some albums twice, like High Voltage as both a 1975 Australian and a 1976 international record. Fix Match points the album at the right one; these releases are the editions of the album it is matched to now.</p>
+    {{end}}
     <table class="data-table">
       <thead><tr><th></th><th>Release</th><th>Tracks</th><th>Country</th><th>Released</th><th>Format</th><th>Status</th></tr></thead>
       <tbody>

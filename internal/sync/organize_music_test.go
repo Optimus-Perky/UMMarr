@@ -436,3 +436,25 @@ func trackNumberOf(t *testing.T, db *sql.DB, trackID int64) int {
 	}
 	return number
 }
+
+// Files that name a release the album does not contain mean the album is
+// matched to the wrong record entirely - MusicBrainz lists High Voltage as
+// both a 1975 Australian and a 1976 international album. Saying nothing
+// there just looks like the tags were ignored.
+func TestReleaseChoices_ReportsFilesFromAnotherAlbum(t *testing.T) {
+	db := openTestDB(t)
+	_, albumID, _ := importedAlbum(t, db)
+	ctx := context.Background()
+	albumPath, _ := store.AlbumFolderPath(ctx, db, albumID)
+
+	svc := &MusicService{DB: db, Probe: func(_ context.Context, path string) (mediainfo.Info, error) {
+		tags := mediainfo.AudioTags{ReleaseMBID: "a-release-from-another-album"}
+		return mediainfo.Info{Schema: mediainfo.Schema, Tags: &tags}, nil
+	}}
+	_ = albumPath
+
+	counts := svc.taggedReleaseCounts(ctx, albumID)
+	if counts["a-release-from-another-album"] != 2 {
+		t.Fatalf("want both files counted against the release they name, got %+v", counts)
+	}
+}

@@ -199,8 +199,14 @@ func main() {
 				return err
 			}
 			defer db.Close()
-			report, err := (&sync.ImportService{DB: db}).ImportArtwork(cmd.Context())
+			svc := &sync.ImportService{DB: db}
+			report, err := svc.ImportArtwork(cmd.Context())
 			fmt.Println(report.Summary())
+			if err != nil {
+				return err
+			}
+			filled, err := svc.BackfillAudioQuality(cmd.Context())
+			fmt.Printf("%d track file(s) had their audio quality worked out from an earlier analysis.\n", filled)
 			return err
 		},
 	})
@@ -420,6 +426,13 @@ func main() {
 				Run: func(ctx context.Context) error {
 					report, err := importService.ImportArtwork(ctx)
 					log.Printf("import artwork: %s", report.Summary())
+					if err != nil {
+						return err
+					}
+					filled, err := importService.BackfillAudioQuality(ctx)
+					if filled > 0 {
+						log.Printf("import artwork: filled in the audio quality of %d track file(s)", filled)
+					}
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Analyze media files", Description: "Reads codecs, resolution, HDR, audio tracks and subtitles from files not analyzed yet, with FFprobe or from Plex (Settings → Media Management).", Interval: time.Hour, Run: mediaAnalyzer.Run})

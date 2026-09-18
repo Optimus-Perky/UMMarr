@@ -296,3 +296,28 @@ func TestAlbumRematch_DialogAndEmptyCase(t *testing.T) {
 		t.Errorf("want an empty selection refused, got %d: %s", resp.StatusCode, body)
 	}
 }
+
+// Release Group describes a video release ("-SPARKS"); on a music release
+// it is either empty or a fragment of a track title, so the music pages
+// don't carry the column at all.
+func TestMusicPages_NoReleaseGroupColumn(t *testing.T) {
+	db := openTestDB(t)
+	_, albumID := seedTestArtist(t, db)
+	seedTestTrack(t, db, albumID)
+	srv := newTestServerWithDB(t, db)
+
+	_, body := get(t, srv, "/music/albums/"+itoa(albumID))
+	if strings.Contains(body, "Release Group") {
+		t.Error("want no Release Group column on the album page")
+	}
+	if !strings.Contains(body, ">Quality<") || !strings.Contains(body, ">Audio<") {
+		t.Error("want Quality and Audio kept, which do describe a music file")
+	}
+	// The TV page keeps it: an episode release genuinely has one.
+	seriesDB := openTestDB(t)
+	seriesID := seedTestSeries(t, seriesDB)
+	seriesSrv := newTestServerWithDB(t, seriesDB)
+	if _, body := get(t, seriesSrv, "/tv/"+itoa(seriesID)); !strings.Contains(body, "Release Group") {
+		t.Error("want Release Group kept on the series page")
+	}
+}

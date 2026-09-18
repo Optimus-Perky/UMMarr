@@ -206,3 +206,41 @@ func TestRemapTrackFile(t *testing.T) {
 		t.Error("want a track from another album refused")
 	}
 }
+
+// The default profile is per media kind: making an audio profile the
+// default must not leave movies and series without one, since the Add
+// forms preselect it.
+func TestDefaultQualityProfile_IsPerMediaKind(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+
+	video, err := store.CreateQualityProfile(ctx, db, "HD")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefaultQualityProfile(ctx, db, video); err != nil {
+		t.Fatal(err)
+	}
+	audio, err := store.CreateQualityProfileOfKind(ctx, db, "Lossless", store.MediaKindAudio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SetDefaultQualityProfile(ctx, db, audio); err != nil {
+		t.Fatal(err)
+	}
+
+	gotVideo, err := store.DefaultQualityProfileIDOfKind(ctx, db, store.MediaKindVideo)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotVideo != video {
+		t.Errorf("video default = %d, want %d - an audio default must not steal it", gotVideo, video)
+	}
+	gotAudio, err := store.DefaultQualityProfileIDOfKind(ctx, db, store.MediaKindAudio)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if gotAudio != audio {
+		t.Errorf("audio default = %d, want %d", gotAudio, audio)
+	}
+}

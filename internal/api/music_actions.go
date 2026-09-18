@@ -570,7 +570,10 @@ func (h *handler) AlbumRematchApply(w http.ResponseWriter, r *http.Request) {
 type releaseChoicesData struct {
 	Album   store.AlbumDetail
 	Choices []sync.ReleaseChoice
-	Err     string
+	// Stray is how many files name a release this album does not have,
+	// which points at the album being matched to the wrong thing entirely.
+	Stray int
+	Err   string
 }
 
 // AlbumReleasePicker lists the release group's releases so the right
@@ -592,11 +595,11 @@ func (h *handler) AlbumReleasePicker(w http.ResponseWriter, r *http.Request) {
 		h.renderPartial(w, "album_releases", data)
 		return
 	}
-	choices, err := h.deps.Music.ReleaseChoices(r.Context(), albumID)
+	report, err := h.deps.Music.ReleaseChoicesReport(r.Context(), albumID)
 	if err != nil {
 		data.Err = err.Error()
 	}
-	data.Choices = choices
+	data.Choices, data.Stray = report.Choices, report.Stray
 	h.renderPartial(w, "album_releases", data)
 }
 

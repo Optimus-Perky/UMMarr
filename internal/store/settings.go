@@ -216,8 +216,11 @@ func ItemFolderPaths(ctx context.Context, q Queryer, mediaType string) ([]string
 
 // SetDefaultQualityProfile makes profile id the one the Add forms
 // preselect, clearing the flag on every other profile.
+// The default is per media kind: making an audio profile the default must
+// not leave movies and series with none.
 func SetDefaultQualityProfile(ctx context.Context, q Queryer, id int64) error {
-	res, err := q.ExecContext(ctx, `UPDATE quality_profiles SET is_default = (id = ?)`, id)
+	res, err := q.ExecContext(ctx, `UPDATE quality_profiles SET is_default = (id = ?)
+		WHERE media_kind = (SELECT media_kind FROM quality_profiles WHERE id = ?)`, id, id)
 	if err != nil {
 		return fmt.Errorf("set default quality profile: %w", err)
 	}
@@ -230,10 +233,16 @@ func SetDefaultQualityProfile(ctx context.Context, q Queryer, id int64) error {
 // DefaultQualityProfileID is the profile the Add forms preselect, or the
 // oldest profile when none is flagged.
 func DefaultQualityProfileID(ctx context.Context, q Queryer) (int64, error) {
+	return DefaultQualityProfileIDOfKind(ctx, q, MediaKindVideo)
+}
+
+// DefaultQualityProfileIDOfKind is the profile an Add form of that kind
+// preselects: the one flagged default, else the oldest of that kind.
+func DefaultQualityProfileIDOfKind(ctx context.Context, q Queryer, mediaKind string) (int64, error) {
 	var id int64
-	err := q.QueryRowContext(ctx, `SELECT id FROM quality_profiles ORDER BY is_default DESC, id LIMIT 1`).Scan(&id)
+	err := q.QueryRowContext(ctx, `SELECT id FROM quality_profiles WHERE media_kind = ? ORDER BY is_default DESC, id LIMIT 1`, mediaKind).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("default quality profile: %w", err)
+		return 0, fmt.Errorf("default %s quality profile: %w", mediaKind, err)
 	}
 	return id, nil
 }

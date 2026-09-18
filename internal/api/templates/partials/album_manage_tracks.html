@@ -44,21 +44,16 @@
     <table class="data-table">
       <thead><tr><th>File</th><th>Size</th><th>Track</th><th></th></tr></thead>
       <tbody>
-        {{range .Unmatched}}
+        {{range $i, $file := .Unmatched}}
         <tr>
-          <td class="wrap">{{.Path}}</td>
-          <td class="nowrap">{{.SizeHuman}}</td>
+          <td class="wrap">{{$file.Path}}</td>
+          <td class="nowrap">{{$file.SizeHuman}}</td>
           <td>
-            <select name="track_id" form="attach-{{.Path}}">
+            <select name="track_id" form="attach-{{$i}}">
               {{range $.Tracks}}<option value="{{.ID}}">{{.TrackNumber}} - {{.Title}}</option>{{end}}
             </select>
           </td>
-          <td>
-            <form id="attach-{{.Path}}" hx-post="/music/albums/{{$album.ID}}/manage-tracks/attach" hx-target="#manage-tracks-result" hx-swap="innerHTML" style="display:inline">
-              <input type="hidden" name="path" value="{{.Path}}">
-              <button class="btn btn-sm" type="submit">Match</button>
-            </form>
-          </td>
+          <td><button class="btn btn-sm" type="submit" form="attach-{{$i}}">Match</button></td>
         </tr>
         {{end}}
       </tbody>
@@ -74,4 +69,9 @@
   </div>
 </form>
 <form id="album-delete-files" hx-post="/music/albums/{{$album.ID}}/manage-tracks/delete" hx-target="#manage-tracks-result" hx-swap="innerHTML"></form>
+{{range $i, $file := .Unmatched}}
+<form id="attach-{{$i}}" hx-post="/music/albums/{{$album.ID}}/manage-tracks/attach" hx-target="#manage-tracks-result" hx-swap="innerHTML">
+  <input type="hidden" name="path" value="{{$file.Path}}">
+</form>
+{{end}}
 {{end}}

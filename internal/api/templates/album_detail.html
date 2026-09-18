@@ -54,7 +54,6 @@
       <button class="icon-btn" type="button" title="Table options">{{template "icon_gear"}}</button>
       <div class="col-picker-panel" hidden>
         <label><input type="checkbox" data-col="duration" checked> Duration</label>
-        <label><input type="checkbox" data-col="group" checked> Release Group</label>
         <label><input type="checkbox" data-col="quality" checked> Quality</label>
         <label><input type="checkbox" data-col="audio" checked> Audio</label>
       </div>
@@ -68,11 +67,11 @@
        without a page reload that would close an open Find release row. -->
   <div hidden hx-get="/music/albums/{{$albumID}}/tracks/status" hx-trigger="load, every 5s" hx-swap="none"></div>
   <table class="data-table" data-table-id="tracks">
-    <thead><tr><th>#</th><th>Title</th><th data-col="duration">Duration</th><th data-col="group">Release Group</th><th data-col="quality">Quality</th><th data-col="audio">Audio</th><th>Status</th><th></th></tr></thead>
+    <thead><tr><th>#</th><th>Title</th><th data-col="duration">Duration</th><th data-col="quality">Quality</th><th data-col="audio">Audio</th><th>Status</th><th></th></tr></thead>
     <tbody>
       {{range .Tracks}}
       {{template "track_row" .}}
-      {{if $hasIndexer}}<tr><td colspan="8" id="track-releases-{{.ID}}"></td></tr>{{end}}
+      {{if $hasIndexer}}<tr><td colspan="7" id="track-releases-{{.ID}}"></td></tr>{{end}}
       {{end}}
     </tbody>
   </table>

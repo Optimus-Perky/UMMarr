@@ -42,19 +42,40 @@ type ReleaseChoice struct {
 	Files int
 }
 
+// ReleaseChoicesReport is the picker: the releases of this album, and
+// whether the files think they belong to a different album altogether.
+type ReleaseChoicesReport struct {
+	Choices []ReleaseChoice
+	// Stray is how many of the album's files name a release that is not one
+	// of these - which means the album itself is matched to the wrong
+	// release group, not that the wrong pressing was chosen.
+	Stray int
+}
+
 // ReleaseChoices lists a release group's releases, marking the one in use
 // and the one the files claim.
 func (s *MusicService) ReleaseChoices(ctx context.Context, albumID int64) ([]ReleaseChoice, error) {
+	report, err := s.ReleaseChoicesReport(ctx, albumID)
+	return report.Choices, err
+}
+
+// ReleaseChoicesReport is ReleaseChoices plus what the files say.
+func (s *MusicService) ReleaseChoicesReport(ctx context.Context, albumID int64) (ReleaseChoicesReport, error) {
+	choices, stray, err := s.releaseChoices(ctx, albumID)
+	return ReleaseChoicesReport{Choices: choices, Stray: stray}, err
+}
+
+func (s *MusicService) releaseChoices(ctx context.Context, albumID int64) ([]ReleaseChoice, int, error) {
 	groupMBID, found, err := store.GetExternalID(ctx, s.DB, "album", albumID, "musicbrainz")
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	if !found {
-		return nil, fmt.Errorf("album %d has no MusicBrainz id", albumID)
+		return nil, 0, fmt.Errorf("album %d has no MusicBrainz id", albumID)
 	}
 	refs, err := s.MusicBrainz.ListReleases(ctx, groupMBID)
 	if err != nil {
-		return nil, fmt.Errorf("list releases of %s: %w", groupMBID, err)
+		return nil, 0, fmt.Errorf("list releases of %s: %w", groupMBID, err)
 	}
 	current, _ := store.CurrentReleaseMBID(ctx, s.DB, albumID)
 	tagged := s.taggedReleaseCounts(ctx, albumID)
@@ -82,6 +103,20 @@ func (s *MusicService) ReleaseChoices(ctx context.Context, albumID int64) ([]Rel
 		}
 		choices = append(choices, choice)
 	}
+	// Files naming a release this group does not contain mean the album is
+	// matched to the wrong release group entirely - High Voltage exists as
+	// both a 1975 Australian album and a 1976 international one.
+	inGroup := make(map[string]bool, len(refs))
+	for _, ref := range refs {
+		inGroup[ref.ID] = true
+	}
+	stray := 0
+	for id, n := range tagged {
+		if !inGroup[id] {
+			stray += n
+		}
+	}
+
 	ranks := make(map[string][4]int, len(refs))
 	for _, ref := range refs {
 		ranks[ref.ID] = rankRelease(ref, hint, countries)
@@ -96,7 +131,7 @@ func (s *MusicService) ReleaseChoices(ctx context.Context, albumID int64) ([]Rel
 		}
 		return choices[i].Date < choices[j].Date
 	})
-	return choices, nil
+	return choices, stray, nil
 }
 
 // taggedReleaseCounts counts which release the album's files say they are.

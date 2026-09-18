@@ -9,7 +9,7 @@
     <label><input type="checkbox" data-col="age" checked> Age</label>
     <label><input type="checkbox" data-col="indexer" checked> Indexer</label>
     <label><input type="checkbox" data-col="category" checked> Category</label>
-    <label><input type="checkbox" data-col="group" checked> Release Group</label>
+    {{if not .Audio}}<label><input type="checkbox" data-col="group" checked> Release Group</label>{{end}}
     <label><input type="checkbox" data-col="quality" checked> Quality</label>
     <label><input type="checkbox" data-col="score" checked> Score</label>
     <label><input type="checkbox" data-col="formats" checked> Formats</label>
@@ -28,7 +28,7 @@
       <th data-sort="text">Title</th>
       <th data-sort="text" data-col="indexer">Indexer</th>
       <th data-sort="text" data-col="category">Category</th>
-      <th data-sort="text" data-col="group">Release Group</th>
+      {{if not .Audio}}<th data-sort="text" data-col="group">Release Group</th>{{end}}
       <th data-sort="text" data-col="quality">Quality</th>
       <th data-sort="number" data-col="score" title="Preferred Words plus custom format scores">Score</th>
       <th data-sort="text" data-col="formats" title="Settings &rarr; Custom Formats">Formats</th>
@@ -48,7 +48,7 @@
       <td>{{if .InfoURL}}<a href="{{.InfoURL}}" target="_blank" rel="noopener">{{.Title}}</a>{{else}}{{.Title}}{{end}}{{if .SeasonPack}} <span class="chip chip-muted">Season pack</span>{{end}}</td>
       <td data-col="indexer">{{.Indexer}}</td>
       <td data-col="category">{{.Categories}}</td>
-      <td data-col="group">{{.ReleaseGroup}}</td>
+      {{if not $.Audio}}<td data-col="group">{{.ReleaseGroup}}</td>{{end}}
       <td data-col="quality">{{if .Quality}}<span class="chip chip-info">{{.Quality}}</span>{{end}}</td>
       <td data-col="score" data-value="{{.TotalScore}}">{{if .TotalScore}}<span class="chip {{if gt .TotalScore 0}}chip-good{{else}}chip-warn{{end}}" title="Preferred words {{.KeywordScore}}, custom formats {{.FormatScore}}">{{if gt .TotalScore 0}}+{{end}}{{.TotalScore}}</span>{{end}}</td>
       <td data-col="formats">{{range .CustomFormats}}<span class="chip chip-muted">{{.}}</span> {{end}}</td>

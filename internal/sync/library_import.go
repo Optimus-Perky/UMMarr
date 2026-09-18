@@ -334,7 +334,7 @@ func (s *ImportService) importSeriesLibrary(ctx context.Context, folder store.Ro
 	if s.Series == nil || s.Series.TMDB == nil {
 		return fmt.Errorf("TMDB isn't configured, so folders can't be matched")
 	}
-	profileID, err := store.DefaultQualityProfileID(ctx, s.DB)
+	profileID, err := store.DefaultQualityProfileIDOfKind(ctx, s.DB, store.MediaKindAudio)
 	if err != nil {
 		return err
 	}

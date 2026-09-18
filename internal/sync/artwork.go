@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -130,4 +131,26 @@ func (s *ImportService) ImportArtwork(ctx context.Context) (ArtworkReport, error
 		}
 	}
 	return report, nil
+}
+
+// BackfillAudioQuality fills in the quality of music files that were
+// analyzed before UMMarr read audio formats: the answer is already in
+// their stored media info, so this needs no disk access and no re-read.
+func (s *ImportService) BackfillAudioQuality(ctx context.Context) (int, error) {
+	files, err := store.TrackFilesNeedingQuality(ctx, s.DB)
+	if err != nil {
+		return 0, err
+	}
+	filled := 0
+	for _, f := range files {
+		audio := AudioQualityFromInfo(f.Info)
+		if audio.Empty() || audio.Key() == "Unknown" {
+			continue
+		}
+		if err := store.UpdateTrackFileQuality(ctx, s.DB, f.ID, releaseparse.FileQuality{Audio: audio}); err != nil {
+			return filled, err
+		}
+		filled++
+	}
+	return filled, nil
 }
