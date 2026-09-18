@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"path/filepath"
 )
 
 // Posters chosen by hand, as in Plex: the choice wins over the providers'
@@ -61,4 +62,52 @@ func applyPosters(ctx context.Context, q Queryer, entityType string, n int, id f
 			set(i, url)
 		}
 	}
+}
+
+// SetAlbumCover records which file in an album's folder is its cover, as
+// a path relative to that folder. It reports whether anything changed, so
+// a re-run can say what it actually did rather than counting everything
+// every time.
+func SetAlbumCover(ctx context.Context, q Queryer, albumID int64, relativePath string) (bool, error) {
+	return setCover(ctx, q, "albums", albumID, relativePath)
+}
+
+// SetArtistCover is SetAlbumCover for an artist folder's own image.
+func SetArtistCover(ctx context.Context, q Queryer, artistID int64, relativePath string) (bool, error) {
+	return setCover(ctx, q, "artists", artistID, relativePath)
+}
+
+func setCover(ctx context.Context, q Queryer, table string, id int64, relativePath string) (bool, error) {
+	var current string
+	_ = q.QueryRowContext(ctx, `SELECT COALESCE(cover_path, '') FROM `+table+` WHERE id = ?`, id).Scan(&current)
+	if current == relativePath {
+		return false, nil
+	}
+	if _, err := q.ExecContext(ctx, `UPDATE `+table+` SET cover_path = NULLIF(?, '') WHERE id = ?`, relativePath, id); err != nil {
+		return false, fmt.Errorf("set cover of %s %d: %w", table, id, err)
+	}
+	return true, nil
+}
+
+// CoverFile is the absolute path of an album or artist's recorded cover,
+// or "" when it has none. The path is kept relative to the folder, so a
+// library that moves keeps working.
+func CoverFile(ctx context.Context, q Queryer, kind string, id int64) (string, error) {
+	var table string
+	switch kind {
+	case "album":
+		table = "albums"
+	case "artist":
+		table = "artists"
+	default:
+		return "", fmt.Errorf("unknown artwork kind %q", kind)
+	}
+	var folder, cover string
+	if err := q.QueryRowContext(ctx, `SELECT COALESCE(path, ''), COALESCE(cover_path, '') FROM `+table+` WHERE id = ?`, id).Scan(&folder, &cover); err != nil {
+		return "", err
+	}
+	if folder == "" || cover == "" {
+		return "", nil
+	}
+	return filepath.Join(folder, cover), nil
 }

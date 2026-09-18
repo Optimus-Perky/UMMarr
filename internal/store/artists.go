@@ -28,7 +28,8 @@ func GetArtistDetail(ctx context.Context, q Queryer, artistID int64) (ArtistDeta
 	var genres, images sql.NullString
 	err := q.QueryRowContext(ctx, `
 		SELECT a.id, a.artist_metadata_id, a.root_folder_id, a.quality_profile_id, m.name, a.path, a.monitored, a.added,
-		       COALESCE(m.overview, ''), COALESCE(m.genres, '[]'), COALESCE(m.disambiguation, ''), COALESCE(m.images, '[]'),
+		       COALESCE(m.overview, ''), COALESCE(m.genres, '[]'), COALESCE(m.disambiguation, ''),
+		       CASE WHEN a.cover_path IS NOT NULL THEN json_array('/music/artists/' || a.id || '/cover') ELSE COALESCE(m.images, '[]') END,
 		       COALESCE((SELECT p.name FROM quality_profiles p WHERE p.id = a.quality_profile_id), '')
 		FROM artists a JOIN artist_metadata m ON m.id = a.artist_metadata_id WHERE a.id = ?`, artistID).
 		Scan(&d.ID, &d.ArtistMetadataID, &d.RootFolderID, &d.QualityProfileID, &d.Name, &d.Path, &d.Monitored, &d.Added,
@@ -187,7 +188,8 @@ func (a ArtistLibrary) StatusLabel() string {
 // ListArtistLibrary lists every artist with its album/track counts.
 func ListArtistLibrary(ctx context.Context, q Queryer) ([]ArtistLibrary, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT a.id, a.artist_metadata_id, a.root_folder_id, a.quality_profile_id, am.name, a.path, a.monitored, a.added, am.images,
+		SELECT a.id, a.artist_metadata_id, a.root_folder_id, a.quality_profile_id, am.name, a.path, a.monitored, a.added,
+		       CASE WHEN a.cover_path IS NOT NULL THEN json_array('/music/artists/' || a.id || '/cover') ELSE am.images END,
 		       COALESCE((SELECT p.name FROM quality_profiles p WHERE p.id = a.quality_profile_id), ''),
 		       COALESCE(am.status, ''),
 		       (SELECT COUNT(*) FROM albums al WHERE al.artist_metadata_id = a.artist_metadata_id),

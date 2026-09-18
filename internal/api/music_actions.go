@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -614,4 +616,43 @@ func (h *handler) AlbumChooseRelease(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albums/%d?release=1", albumID))
 	w.WriteHeader(http.StatusOK)
+}
+
+// AlbumCover and ArtistCover serve artwork that is already in the library
+// folder - a folder.jpg beside the tracks - so a hand-managed library
+// shows its own covers without anything being fetched or copied.
+func (h *handler) AlbumCover(w http.ResponseWriter, r *http.Request) {
+	h.serveCover(w, r, "album")
+}
+
+func (h *handler) ArtistCover(w http.ResponseWriter, r *http.Request) {
+	h.serveCover(w, r, "artist")
+}
+
+func (h *handler) serveCover(w http.ResponseWriter, r *http.Request, kind string) {
+	id, ok := pathID(w, r, "id", kind)
+	if !ok {
+		return
+	}
+	file, err := store.CoverFile(r.Context(), h.deps.DB, kind, id)
+	if err != nil || file == "" {
+		http.NotFound(w, r)
+		return
+	}
+	// The library's own file, not something a request named: the path
+	// comes from the database, and only the recorded name is ever joined
+	// onto the folder.
+	f, err := os.Open(file)
+	if err != nil {
+		http.NotFound(w, r)
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		http.NotFound(w, r)
+		return
+	}
+	w.Header().Set("Cache-Control", "public, max-age=86400")
+	http.ServeContent(w, r, filepath.Base(file), info.ModTime(), f)
 }

@@ -191,6 +191,21 @@ func main() {
 	root.AddCommand(renamePreview)
 
 	root.AddCommand(&cobra.Command{
+		Use:   "artwork",
+		Short: "Import the cover art already sitting in the library folders",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := store.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			report, err := (&sync.ImportService{DB: db}).ImportArtwork(cmd.Context())
+			fmt.Println(report.Summary())
+			return err
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
 		Use:   "serve",
 		Short: "Run the UMMarr web UI and API",
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -398,6 +413,13 @@ func main() {
 				Run: func(ctx context.Context) error {
 					report, err := sync.RefreshLibrary(ctx, movieService, seriesService)
 					log.Printf("refresh metadata: %s", report.Summary())
+					return err
+				}})
+			scheduler.Register(&tasks.Task{Name: "Import artwork",
+				Description: "Finds the cover art already in the library folders (cover.jpg, folder.jpg and friends) and shows it on the album and artist pages. Nothing is downloaded or copied.",
+				Run: func(ctx context.Context) error {
+					report, err := importService.ImportArtwork(ctx)
+					log.Printf("import artwork: %s", report.Summary())
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Analyze media files", Description: "Reads codecs, resolution, HDR, audio tracks and subtitles from files not analyzed yet, with FFprobe or from Plex (Settings → Media Management).", Interval: time.Hour, Run: mediaAnalyzer.Run})

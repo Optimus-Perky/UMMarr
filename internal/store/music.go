@@ -436,7 +436,8 @@ type AlbumSummary struct {
 const albumSummaryQuery = `
 	SELECT al.id, al.artist_metadata_id, am.name, al.title,
 	       CAST(strftime('%Y', al.release_date) AS INTEGER), al.path, al.monitored, al.added,
-	       COALESCE(cs.name, ''), csa.sequence_number, al.images,
+	       COALESCE(cs.name, ''), csa.sequence_number,
+	       CASE WHEN al.cover_path IS NOT NULL THEN json_array('/music/albums/' || al.id || '/cover') ELSE al.images END,
 	       COALESCE((SELECT ar.root_folder_id FROM artists ar WHERE ar.artist_metadata_id = al.artist_metadata_id), 0)
 	FROM albums al
 	JOIN artist_metadata am ON am.id = al.artist_metadata_id
@@ -522,7 +523,8 @@ func GetAlbumDetail(ctx context.Context, q Queryer, albumID int64) (AlbumDetail,
 		SELECT al.id, al.artist_metadata_id, am.name, al.title,
 		       CAST(strftime('%Y', al.release_date) AS INTEGER), al.path, al.monitored, al.added,
 		       COALESCE(cs.name, ''), csa.sequence_number,
-		       al.overview, al.album_type, al.genres, al.images, al.ratings,
+		       al.overview, al.album_type, al.genres,
+		       CASE WHEN al.cover_path IS NOT NULL THEN json_array('/music/albums/' || al.id || '/cover') ELSE al.images END, al.ratings,
 		       a.id, a.quality_profile_id, qp.name
 		FROM albums al
 		JOIN artist_metadata am ON am.id = al.artist_metadata_id
@@ -642,7 +644,8 @@ func ListTracksForAlbum(ctx context.Context, q Queryer, albumID int64) ([]TrackD
 // ListArtists lists every tracked artist, newest first.
 func ListArtists(ctx context.Context, q Queryer) ([]ArtistSummary, error) {
 	rows, err := q.QueryContext(ctx, `
-		SELECT a.id, a.artist_metadata_id, a.root_folder_id, a.quality_profile_id, am.name, a.path, a.monitored, a.added, am.images
+		SELECT a.id, a.artist_metadata_id, a.root_folder_id, a.quality_profile_id, am.name, a.path, a.monitored, a.added,
+		       CASE WHEN a.cover_path IS NOT NULL THEN json_array('/music/artists/' || a.id || '/cover') ELSE am.images END
 		FROM artists a JOIN artist_metadata am ON am.id = a.artist_metadata_id
 		ORDER BY a.added DESC
 	`)

@@ -138,6 +138,8 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /music/search-cutoff", h.StartMissingSearch)
 	mux.HandleFunc("GET /music/search-cutoff", h.MissingSearchStatus)
 	mux.HandleFunc("POST /music/albums/{id}/monitored", h.AlbumMonitoredToggle)
+	mux.HandleFunc("GET /music/albums/{id}/cover", h.AlbumCover)
+	mux.HandleFunc("GET /music/artists/{id}/cover", h.ArtistCover)
 	mux.HandleFunc("GET /music/albums/{id}/manage-tracks", h.AlbumManageTracksForm)
 	mux.HandleFunc("POST /music/albums/{id}/manage-tracks", h.AlbumManageTracksApply)
 	mux.HandleFunc("POST /music/albums/{id}/manage-tracks/delete", h.AlbumDeleteTrackFiles)
