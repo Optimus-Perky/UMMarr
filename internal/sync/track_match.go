@@ -110,20 +110,7 @@ func (s *ImportService) MatchTracks(ctx context.Context, dir string, files []imp
 	}
 
 	taken := make(map[int64]bool, len(tracks))
-	byMBID := map[string]store.TrackImportInfo{}
-	byNumbers := map[[2]int]store.TrackImportInfo{}
-	for _, t := range tracks {
-		if t.MBID != "" {
-			byMBID[strings.ToLower(t.MBID)] = t
-		}
-		if n := trackNumber(t); n > 0 {
-			medium := t.Medium
-			if medium == 0 {
-				medium = 1
-			}
-			byNumbers[[2]int{medium, n}] = t
-		}
-	}
+	index := newTrackIndex(tracks)
 
 	claim := func(file importer.File, track store.TrackImportInfo, how string) bool {
 		if taken[track.ID] {
@@ -137,21 +124,15 @@ func (s *ImportService) MatchTracks(ctx context.Context, dir string, files []imp
 	var leftover []importer.File
 	for _, file := range files {
 		tags := s.fileTags(ctx, filepath.Join(dir, file.Path))
-		if id := strings.ToLower(tags.TrackMBID); id != "" {
-			if track, ok := byMBID[id]; ok && claim(file, track, MatchMBID) {
+		track, how := index.lookup(tags)
+		if how != "" && claim(file, track, how) {
+			switch how {
+			case MatchMBID:
 				report.ByMBID++
-				continue
-			}
-		}
-		if tags.TrackNumber > 0 {
-			medium := tags.DiscNumber
-			if medium == 0 {
-				medium = 1
-			}
-			if track, ok := byNumbers[[2]int{medium, tags.TrackNumber}]; ok && claim(file, track, MatchNumbers) {
+			case MatchNumbers:
 				report.ByNumbers++
-				continue
 			}
+			continue
 		}
 		leftover = append(leftover, file)
 	}
@@ -241,4 +222,48 @@ func (s *ImportService) AttachAlbumFile(ctx context.Context, albumID, trackID in
 	e.Detail, e.Source = file.Path+" matched by hand", "manage track files"
 	s.Events.Record(ctx, e)
 	return nil
+}
+
+// trackIndex looks a track up by what a file says about itself.
+type trackIndex struct {
+	byMBID    map[string]store.TrackImportInfo
+	byNumbers map[[2]int]store.TrackImportInfo
+}
+
+func newTrackIndex(tracks []store.TrackImportInfo) trackIndex {
+	index := trackIndex{byMBID: map[string]store.TrackImportInfo{}, byNumbers: map[[2]int]store.TrackImportInfo{}}
+	for _, t := range tracks {
+		if t.MBID != "" {
+			index.byMBID[strings.ToLower(t.MBID)] = t
+		}
+		if n := trackNumber(t); n > 0 {
+			index.byNumbers[[2]int{medium(t.Medium), n}] = t
+		}
+	}
+	return index
+}
+
+// medium treats an unnumbered disc as disc 1, which is how single-disc
+// releases and files without a disc tag both read.
+func medium(n int) int {
+	if n == 0 {
+		return 1
+	}
+	return n
+}
+
+// lookup returns the track the tags identify, and how. An empty how means
+// the file said nothing UMMarr can act on.
+func (i trackIndex) lookup(tags mediainfo.AudioTags) (store.TrackImportInfo, string) {
+	if id := strings.ToLower(tags.TrackMBID); id != "" {
+		if track, ok := i.byMBID[id]; ok {
+			return track, MatchMBID
+		}
+	}
+	if tags.TrackNumber > 0 {
+		if track, ok := i.byNumbers[[2]int{medium(tags.DiscNumber), tags.TrackNumber}]; ok {
+			return track, MatchNumbers
+		}
+	}
+	return store.TrackImportInfo{}, ""
 }

@@ -265,3 +265,34 @@ func TestAlbumPassSave_AppliesAMonitorOptionToTickedArtists(t *testing.T) {
 		t.Errorf("want an empty selection refused, got: %s", body)
 	}
 }
+
+func TestAlbumRematch_DialogAndEmptyCase(t *testing.T) {
+	db := openTestDB(t)
+	_, albumID := seedTestArtist(t, db)
+	srv := newTestServerWithDB(t, db)
+	id := itoa(albumID)
+
+	_, body := get(t, srv, "/music/albums/"+id)
+	if !strings.Contains(body, `hx-get="/music/albums/`+id+`/rematch"`) || !strings.Contains(body, "Re-match from tags") {
+		t.Error("want Re-match from tags on the album page")
+	}
+	status, body := get(t, srv, "/music/albums/"+id+"/rematch")
+	if status != 200 {
+		t.Fatalf("rematch preview = %d", status)
+	}
+	// An album with no files has nothing to move, and should say so rather
+	// than offering a button that does nothing.
+	if !strings.Contains(body, "already on the track its tags name") {
+		t.Errorf("want the nothing-to-do case explained, got:\n%s", body)
+	}
+	if strings.Contains(body, "Re-match ticked") {
+		t.Error("want no apply button when there is nothing to re-match")
+	}
+
+	// Applying with nothing ticked is refused rather than silently doing
+	// nothing.
+	resp, body := postForm(t, srv, "/music/albums/"+id+"/rematch", nil)
+	if resp.StatusCode != 200 || !strings.Contains(body, "Tick at least one file") {
+		t.Errorf("want an empty selection refused, got %d: %s", resp.StatusCode, body)
+	}
+}

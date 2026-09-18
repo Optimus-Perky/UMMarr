@@ -1,0 +1,43 @@
+{{define "album_rematch"}}
+{{$album := .Album}}
+<form hx-post="/music/albums/{{$album.ID}}/rematch" hx-target="#rematch-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Re-match from tags - {{$album.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    {{if .Err}}<p class="indexer-test failed">{{.Err}}</p>{{else}}
+    <p class="notice">What each file says it is, against the track it is attached to now. Nothing moves on disk - only which track a file belongs to. Files that swapped places have to be ticked together, or there is nowhere for the first one to go.</p>
+    {{if .Report.Changes}}
+    <table class="data-table">
+      <thead><tr><th></th><th>File</th><th>Attached to</th><th>Its tags say</th><th>Matched by</th></tr></thead>
+      <tbody>
+        {{range .Report.Changes}}
+        <tr>
+          <td class="col-tight"><input type="checkbox" name="file_id" value="{{.FileID}}" checked></td>
+          <td class="wrap">{{.Path}}</td>
+          <td class="wrap">{{if .FromTitle}}{{.FromTitle}}{{else}}<span class="setting-help">nothing</span>{{end}}</td>
+          <td class="wrap">{{.ToNumber}} - {{.ToTitle}}{{if .Occupied}} <span class="chip chip-warn" title="Held by {{.OccupiedBy}}">swap</span>{{end}}</td>
+          <td class="nowrap">{{if eq .How "musicbrainz"}}<span class="chip chip-good">MusicBrainz id</span>{{else}}<span class="chip chip-info">disc/track tags</span>{{end}}</td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="notice">Every file is already on the track its tags name.</p>
+    {{end}}
+    <p class="setting-help" style="margin-top:10px">
+      {{.Report.Confirmed}} file(s) confirmed in place.
+      {{if .Report.Unreadable}} {{len .Report.Unreadable}} file(s) say nothing UMMarr can use, so they keep the track they have: {{range $i, $p := .Report.Unreadable}}{{if $i}}, {{end}}{{$p}}{{end}}.{{end}}
+    </p>
+    {{end}}
+    <div id="rematch-result"></div>
+  </div>
+  <div class="dialog-foot">
+    {{if .Report.Changes}}<label class="setting-check"><input type="checkbox" checked onchange="this.closest('form').querySelectorAll('input[name=file_id]').forEach(function (c) { c.checked = this.checked }, this)"> All</label>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    {{if .Report.Changes}}<button class="btn btn-sm" type="submit">Re-match ticked</button>{{end}}
+  </div>
+</form>
+{{end}}

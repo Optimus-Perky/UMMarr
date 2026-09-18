@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
+	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -318,4 +319,120 @@ func TestUnmatchedAlbumFiles_ListsAndAttachesByHand(t *testing.T) {
 	if err := svc.AttachAlbumFile(ctx, albumID, free, "nothing.flac"); err == nil {
 		t.Error("want an unknown file refused")
 	}
+}
+
+// Re-match from tags exists to undo what positional matching got wrong, and
+// the worst of that is two files on each other's tracks. Fixing a swap means
+// detaching both before attaching either, or the second move lands on a
+// track that still holds the first file.
+func TestRematch_FixesASwapAndRefusesAHalfOne(t *testing.T) {
+	db := openTestDB(t)
+	_, albumID, _ := importedAlbum(t, db)
+	ctx := context.Background()
+	albumPath, _ := store.AlbumFolderPath(ctx, db, albumID)
+
+	files, err := store.ListTrackFileDetails(ctx, db, albumID)
+	if err != nil || len(files) != 2 {
+		t.Fatalf("want two attached files, got %+v (%v)", files, err)
+	}
+	first, second := files[0], files[1]
+
+	// Tag each file with the OTHER file's track number: they are swapped.
+	tags := map[string]mediainfo.AudioTags{
+		first.RelativePath:  {TrackNumber: trackNumberOf(t, db, second.TrackID), DiscNumber: 1},
+		second.RelativePath: {TrackNumber: trackNumberOf(t, db, first.TrackID), DiscNumber: 1},
+	}
+	svc := &ImportService{DB: db, Events: &Events{DB: db}, Probe: func(_ context.Context, path string) (mediainfo.Info, error) {
+		for name, tag := range tags {
+			if path == filepath.Join(albumPath, name) {
+				t := tag
+				return mediainfo.Info{Schema: mediainfo.Schema, Tags: &t}, nil
+			}
+		}
+		return mediainfo.Info{Schema: mediainfo.Schema}, nil
+	}}
+
+	report, err := svc.RematchPreview(ctx, albumID)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if len(report.Changes) != 2 || report.Confirmed != 0 {
+		t.Fatalf("want both files reported as misplaced, got %+v", report)
+	}
+	for _, c := range report.Changes {
+		if !c.Occupied {
+			t.Errorf("want %s to say its track is occupied by the other file", c.Path)
+		}
+	}
+
+	// Moving only one of a swapped pair has nowhere to go, and must refuse
+	// rather than detach a file and leave it hanging.
+	if _, err := svc.ApplyRematch(ctx, albumID, []int64{first.ID}); err == nil {
+		t.Error("want half a swap refused")
+	}
+	after, _ := store.ListTrackFileDetails(ctx, db, albumID)
+	if len(after) != 2 {
+		t.Fatalf("want both files still attached after the refusal, got %d", len(after))
+	}
+
+	// Both together works.
+	moved, err := svc.ApplyRematch(ctx, albumID, []int64{first.ID, second.ID})
+	if err != nil || moved != 2 {
+		t.Fatalf("apply: moved %d: %v", moved, err)
+	}
+	after, _ = store.ListTrackFileDetails(ctx, db, albumID)
+	if len(after) != 2 {
+		t.Fatalf("want both files still attached, got %d", len(after))
+	}
+	for _, f := range after {
+		switch f.RelativePath {
+		case first.RelativePath:
+			if f.TrackID != second.TrackID {
+				t.Errorf("%s is on track %d, want %d", f.RelativePath, f.TrackID, second.TrackID)
+			}
+		case second.RelativePath:
+			if f.TrackID != first.TrackID {
+				t.Errorf("%s is on track %d, want %d", f.RelativePath, f.TrackID, first.TrackID)
+			}
+		}
+	}
+	// A second preview has nothing left to say.
+	if report, err := svc.RematchPreview(ctx, albumID); err != nil || len(report.Changes) != 0 || report.Confirmed != 2 {
+		t.Errorf("want both confirmed in place afterwards, got %+v (%v)", report, err)
+	}
+}
+
+// A file whose tags say nothing keeps the track it has: re-matching is for
+// replacing guesses with facts, not for making new guesses.
+func TestRematch_LeavesUnreadableFilesWhereTheyAre(t *testing.T) {
+	db := openTestDB(t)
+	_, albumID, _ := importedAlbum(t, db)
+	ctx := context.Background()
+	svc := &ImportService{DB: db, Events: &Events{DB: db}, Probe: func(context.Context, string) (mediainfo.Info, error) {
+		return mediainfo.Info{Schema: mediainfo.Schema}, nil // no tags at all
+	}}
+
+	before, _ := store.ListTrackFileDetails(ctx, db, albumID)
+	report, err := svc.RematchPreview(ctx, albumID)
+	if err != nil {
+		t.Fatalf("preview: %v", err)
+	}
+	if len(report.Changes) != 0 || len(report.Unreadable) != len(before) {
+		t.Fatalf("want every file reported as unreadable and nothing changed, got %+v", report)
+	}
+	after, _ := store.ListTrackFileDetails(ctx, db, albumID)
+	for i := range before {
+		if before[i].TrackID != after[i].TrackID {
+			t.Errorf("%s moved", before[i].RelativePath)
+		}
+	}
+}
+
+func trackNumberOf(t *testing.T, db *sql.DB, trackID int64) int {
+	t.Helper()
+	var number int
+	if err := db.QueryRow(`SELECT CAST(track_number AS INTEGER) FROM tracks WHERE id = ?`, trackID).Scan(&number); err != nil {
+		t.Fatalf("track number of %d: %v", trackID, err)
+	}
+	return number
 }

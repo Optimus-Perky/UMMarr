@@ -513,3 +513,54 @@ func (h *handler) AlbumPassSave(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albumpass?saved=%d", len(ids)))
 	w.WriteHeader(http.StatusOK)
 }
+
+type rematchData struct {
+	Album  store.AlbumDetail
+	Report sync.RematchReport
+	Err    string
+}
+
+// AlbumRematchPreview shows where an album's files say they belong, for a
+// library matched by position before UMMarr read tags.
+func (h *handler) AlbumRematchPreview(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	album, found, err := store.GetAlbumDetail(r.Context(), h.deps.DB, albumID)
+	if err != nil || !found {
+		http.NotFound(w, r)
+		return
+	}
+	data := rematchData{Album: album}
+	report, err := h.deps.Import.RematchPreview(r.Context(), albumID)
+	if err != nil {
+		data.Err = err.Error()
+	}
+	data.Report = report
+	h.renderPartial(w, "album_rematch", data)
+}
+
+// AlbumRematchApply moves the ticked files onto the tracks their tags name.
+func (h *handler) AlbumRematchApply(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ids := h.renameFileIDs(r)
+	if len(ids) == 0 {
+		renderInlineError(w, "Tick at least one file.")
+		return
+	}
+	moved, err := h.deps.Import.ApplyRematch(r.Context(), albumID, ids)
+	if err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albums/%d?rematched=%d", albumID, moved))
+	w.WriteHeader(http.StatusOK)
+}
