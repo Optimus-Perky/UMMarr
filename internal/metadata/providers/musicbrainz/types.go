@@ -64,11 +64,12 @@ type Relation struct {
 // separate search call before fetching its full track listing via
 // Client.GetRelease.
 type ReleaseRef struct {
-	ID      string `json:"id"`
-	Title   string `json:"title"`
-	Status  string `json:"status"`
-	Date    string `json:"date"`
-	Country string `json:"country"`
+	ID             string `json:"id"`
+	Title          string `json:"title"`
+	Status         string `json:"status"`
+	Date           string `json:"date"`
+	Country        string `json:"country"`
+	Disambiguation string `json:"disambiguation"`
 	// Media is only filled in when the request asks for inc=media, which
 	// ListReleases does: its track count is how an edition is told apart
 	// from another - 13 tracks for a UK release, 16 for a Japanese one.

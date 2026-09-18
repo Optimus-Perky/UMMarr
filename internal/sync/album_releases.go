@@ -27,13 +27,16 @@ import (
 
 // ReleaseChoice is one release of an album, as the picker lists it.
 type ReleaseChoice struct {
-	MBID       string
-	Title      string
-	Status     string
-	Country    string
-	Date       string
-	Format     string
-	TrackCount int
+	MBID  string
+	Title string
+	// Disambiguation is what MusicBrainz calls this pressing apart from the
+	// others: "Australian version", "20th anniversary edition".
+	Disambiguation string
+	Status         string
+	Country        string
+	Date           string
+	Format         string
+	TrackCount     int
 	// Current is the release the album tracks now.
 	Current bool
 	// Tagged means the album's own files name this release.
@@ -94,7 +97,7 @@ func (s *MusicService) releaseChoices(ctx context.Context, albumID int64) ([]Rel
 	choices := make([]ReleaseChoice, 0, len(refs))
 	for _, ref := range refs {
 		choice := ReleaseChoice{
-			MBID: ref.ID, Title: ref.Title, Status: ref.Status, Country: ref.Country,
+			MBID: ref.ID, Title: ref.Title, Disambiguation: ref.Disambiguation, Status: ref.Status, Country: ref.Country,
 			Date: ref.Date, Format: ref.Format(), TrackCount: ref.TrackCount(),
 			Current: ref.ID == current,
 		}

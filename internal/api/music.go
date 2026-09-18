@@ -305,6 +305,7 @@ type trackView struct {
 }
 
 type albumDetailPageData struct {
+	Edition            store.AlbumEdition
 	Active             string
 	PageTitle          string
 	Album              store.AlbumDetail
@@ -335,8 +336,10 @@ func (h *handler) AlbumDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	edition, _ := store.GetAlbumEdition(ctx, h.deps.DB, albumID)
 	h.renderPage(w, "album_detail", albumDetailPageData{
-		Active: "music", PageTitle: album.Title,
+		Edition: edition,
+		Active:  "music", PageTitle: album.Title,
 		Album: album, Ratings: toRatingViews(album.Ratings), Tracks: views,
 		QualityProfileName: album.QualityProfileName.String,
 		HasIndexer:         h.deps.Indexer.Configured(ctx),

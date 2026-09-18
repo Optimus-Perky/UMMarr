@@ -17,7 +17,7 @@
         {{range .Choices}}
         <tr>
           <td class="col-tight"><input type="radio" name="release" value="{{.MBID}}"{{if or .Current .Tagged}} checked{{end}}></td>
-          <td class="wrap">{{.Title}}
+          <td class="wrap">{{.Title}}{{if .Disambiguation}} <span class="card-sub">({{.Disambiguation}})</span>{{end}}
             {{if .Tagged}}<span class="chip chip-good" title="{{.Files}} of this album's files carry this release's MusicBrainz id">your files say this one</span>{{end}}
             {{if .Current}}<span class="chip chip-info">in use</span>{{end}}
           </td>

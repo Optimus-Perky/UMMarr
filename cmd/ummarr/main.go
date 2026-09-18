@@ -218,6 +218,30 @@ func main() {
 	fetchCovers.Flags().IntVar(&coverLimit, "limit", 0, "stop after this many albums (0 for all)")
 	root.AddCommand(fetchCovers)
 
+	var editionLimit int
+	fetchEditions := &cobra.Command{
+		Use:   "fetch-editions",
+		Short: "Ask Discogs what pressing each album is: label, catalogue number, format",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			db, err := store.Open(dbPath)
+			if err != nil {
+				return err
+			}
+			defer db.Close()
+			cfg := config.Load()
+			client := sync.DiscogsFromSettings(cmd.Context(), db, cfg.UserAgent)
+			if client == nil {
+				return fmt.Errorf("enable Discogs under Settings, Metadata first")
+			}
+			fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: filepath.Join(filepath.Dir(dbPath), "artwork")}
+			report, err := fetcher.FetchEditions(cmd.Context(), editionLimit)
+			fmt.Println(report.Summary())
+			return err
+		},
+	}
+	fetchEditions.Flags().IntVar(&editionLimit, "limit", 0, "stop after this many albums (0 for all)")
+	root.AddCommand(fetchEditions)
+
 	root.AddCommand(&cobra.Command{
 		Use:   "artwork",
 		Short: "Import the cover art already sitting in the library folders",
@@ -460,6 +484,18 @@ func main() {
 					fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: artworkDir}
 					report, err := fetcher.FetchMissingCovers(ctx, 0)
 					log.Printf("fetch missing artwork: %s", report.Summary())
+					return err
+				}})
+			scheduler.Register(&tasks.Task{Name: "Fetch edition details",
+				Description: "Asks Discogs what pressing each album is - label, catalogue number and whether it is a remaster or a reissue - which MusicBrainz does not carry. Needs Discogs enabled under Settings -> Metadata.",
+				Run: func(ctx context.Context) error {
+					client := sync.DiscogsFromSettings(ctx, db, cfg.UserAgent)
+					if client == nil {
+						return nil
+					}
+					fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: artworkDir}
+					report, err := fetcher.FetchEditions(ctx, 0)
+					log.Printf("fetch edition details: %s", report.Summary())
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Import artwork",

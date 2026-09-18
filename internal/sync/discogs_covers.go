@@ -192,3 +192,94 @@ func DiscogsFromSettings(ctx context.Context, db *sql.DB, userAgent string) *dis
 	}
 	return client
 }
+
+// EditionReport is what an edition-detail run did.
+type EditionReport struct {
+	Looked  int
+	Filled  int
+	NoMatch int
+	Failed  int
+}
+
+// Summary is the report in one line.
+func (r EditionReport) Summary() string {
+	return fmt.Sprintf("%d album(s) without edition detail: %d filled in, %d had no match on Discogs, %d failed.",
+		r.Looked, r.Filled, r.NoMatch, r.Failed)
+}
+
+// FetchEditions fills in what pressing each album is - the label,
+// catalogue number and format descriptions that tell a remaster from an
+// original. MusicBrainz has the country and date; this is the detail it
+// doesn't carry.
+//
+// It matches the same way covers do: a Discogs hit whose title isn't this
+// album is no match, and the right year wins among several. A cover found
+// on the way is kept too, since the release has been fetched anyway.
+func (f *CoverFetcher) FetchEditions(ctx context.Context, limit int) (EditionReport, error) {
+	var report EditionReport
+	if f.Discogs == nil {
+		return report, fmt.Errorf("Discogs isn't configured")
+	}
+	candidates, err := store.AlbumsWithoutEdition(ctx, f.DB)
+	if err != nil {
+		return report, err
+	}
+	for _, c := range candidates {
+		if ctx.Err() != nil {
+			return report, ctx.Err()
+		}
+		if limit > 0 && report.Looked >= limit {
+			break
+		}
+		report.Looked++
+
+		results, err := f.Discogs.SearchRelease(ctx, c.Artist, c.Album)
+		if err != nil {
+			report.Failed++
+			continue
+		}
+		best, ok := bestDiscogsMatch(results, c)
+		if !ok {
+			report.NoMatch++
+			continue
+		}
+		release, err := f.Discogs.GetRelease(ctx, best.ID)
+		if err != nil {
+			report.Failed++
+			continue
+		}
+		label, catalogue := release.FirstLabel()
+		edition := store.AlbumEdition{
+			Label: label, Catalogue: catalogue, Format: release.FormatSummary(),
+			Country: release.Country, Year: release.Year, DiscogsReleaseID: int64(release.ID),
+		}
+		if err := store.SetAlbumEdition(ctx, f.DB, c.AlbumID, edition); err != nil {
+			report.Failed++
+			continue
+		}
+		report.Filled++
+		f.cacheCoverIfMissing(ctx, c.AlbumID, release)
+	}
+	return report, nil
+}
+
+// cacheCoverIfMissing keeps the artwork from a release fetched for its
+// edition detail, so an album with neither doesn't need a second lookup.
+func (f *CoverFetcher) cacheCoverIfMissing(ctx context.Context, albumID int64, release *discogs.Release) {
+	if f.Dir == "" {
+		return
+	}
+	if existing, err := store.CoverFile(ctx, f.DB, "album", albumID); err != nil || existing != "" {
+		return
+	}
+	url := release.FrontCover()
+	if url == "" {
+		return
+	}
+	if err := os.MkdirAll(f.Dir, 0o755); err != nil {
+		return
+	}
+	if file, err := f.download(ctx, albumID, url); err == nil {
+		_ = store.SetCachedCover(ctx, f.DB, albumID, file, "discogs")
+	}
+}

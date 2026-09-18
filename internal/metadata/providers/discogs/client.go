@@ -145,6 +145,7 @@ type Release struct {
 	Genres      []string `json:"genres"`
 	Styles      []string `json:"styles"`
 	Formats     []Format `json:"formats"`
+	Labels      []Label  `json:"labels"`
 	Tracklist   []Track  `json:"tracklist"`
 	Notes       string   `json:"notes"`
 	ResourceURL string   `json:"resource_url"`
@@ -211,4 +212,51 @@ func (c *Client) Test(ctx context.Context) error {
 	}
 	// A release that has existed since the site began: cheap and stable.
 	return c.get(ctx, "/releases/1", nil, &out)
+}
+
+// Labels are the label and catalogue number a release was issued under.
+type Label struct {
+	Name        string `json:"name"`
+	CatalogueNo string `json:"catno"`
+	EntityType  string `json:"entity_type_name"`
+	ResourceURL string `json:"resource_url"`
+	ID          int    `json:"id"`
+}
+
+// FormatSummary describes the medium and what kind of issue it is:
+// "CD, Album, Remastered", or "2xVinyl, LP, 180g" for a double album.
+func (r *Release) FormatSummary() string {
+	var parts []string
+	for _, f := range r.Formats {
+		name := f.Name
+		if qty, err := strconv.Atoi(f.Quantity); err == nil && qty > 1 {
+			name = strconv.Itoa(qty) + "x" + name
+		}
+		parts = append(parts, name)
+		parts = append(parts, f.Descriptions...)
+	}
+	return strings.Join(dedupe(parts), ", ")
+}
+
+// FirstLabel is the label and catalogue number to show, or empty strings.
+func (r *Release) FirstLabel() (name, catalogue string) {
+	for _, l := range r.Labels {
+		if l.Name != "" {
+			return l.Name, l.CatalogueNo
+		}
+	}
+	return "", ""
+}
+
+func dedupe(values []string) []string {
+	seen := map[string]bool{}
+	var out []string
+	for _, v := range values {
+		if v == "" || seen[v] {
+			continue
+		}
+		seen[v] = true
+		out = append(out, v)
+	}
+	return out
 }

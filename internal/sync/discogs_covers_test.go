@@ -120,3 +120,78 @@ func TestBestDiscogsMatch_PrefersTheRightYear(t *testing.T) {
 		t.Error("want no match from no results")
 	}
 }
+
+// Edition detail is what Discogs adds over MusicBrainz: the label,
+// catalogue number and the descriptions that tell a remaster from an
+// original. The same strict matching applies - a wrong album must not
+// stamp its pressing onto this one.
+func TestFetchEditions(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	_, albumID, _ := importedAlbum(t, db)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasPrefix(r.URL.Path, "/database/search"):
+			_ = json.NewEncoder(w).Encode(map[string]any{"results": []discogs.SearchResult{
+				{ID: 42, Title: "Daft Punk - Homework", Year: "1997"},
+			}})
+		case r.URL.Path == "/releases/42":
+			_ = json.NewEncoder(w).Encode(discogs.Release{
+				ID: 42, Title: "Homework", Year: 1997, Country: "UK",
+				Formats: []discogs.Format{{Name: "Vinyl", Quantity: "2", Descriptions: []string{"LP", "Album", "Remastered"}}},
+				Labels:  []discogs.Label{{Name: "Virgin", CatalogueNo: "V 2821"}},
+				Images:  []discogs.Image{{Type: "primary", URI: "http://" + r.Host + "/image.jpg"}},
+			})
+		case r.URL.Path == "/image.jpg":
+			w.Header().Set("Content-Type", "image/jpeg")
+			_, _ = w.Write([]byte("cover"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	t.Cleanup(srv.Close)
+
+	client, err := discogs.New(discogs.Options{UserAgent: "UMMarr/test", BaseURL: srv.URL})
+	if err != nil {
+		t.Fatal(err)
+	}
+	fetcher := &CoverFetcher{DB: db, Discogs: client, Dir: t.TempDir()}
+
+	report, err := fetcher.FetchEditions(ctx, 0)
+	if err != nil {
+		t.Fatalf("fetch editions: %v", err)
+	}
+	if report.Filled != 1 || report.NoMatch != 0 || report.Failed != 0 {
+		t.Fatalf("report = %+v", report)
+	}
+
+	edition, err := store.GetAlbumEdition(ctx, db, albumID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if edition.Label != "Virgin" || edition.Catalogue != "V 2821" || edition.Country != "UK" || edition.Year != 1997 {
+		t.Errorf("edition = %+v", edition)
+	}
+	// A double album says so, and the descriptions come through in order.
+	if edition.Format != "2xVinyl, LP, Album, Remastered" {
+		t.Errorf("format = %q", edition.Format)
+	}
+	if got := edition.Summary(); got != "2xVinyl, LP, Album, Remastered · Virgin V 2821 · UK · 1997" {
+		t.Errorf("summary = %q", got)
+	}
+	if edition.DiscogsURL() != "https://www.discogs.com/release/42" {
+		t.Errorf("link = %q", edition.DiscogsURL())
+	}
+
+	// The release was fetched anyway, so its cover is kept rather than
+	// costing a second lookup later.
+	if file, _ := store.CoverFile(ctx, db, "album", albumID); file == "" {
+		t.Error("want the cover kept from the release fetched for its edition")
+	}
+
+	// A second run has nothing to do.
+	if report, err := fetcher.FetchEditions(ctx, 0); err != nil || report.Looked != 0 {
+		t.Errorf("want nothing left, got %+v (%v)", report, err)
+	}
+}
