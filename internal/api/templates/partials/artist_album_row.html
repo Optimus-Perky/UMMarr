@@ -1,0 +1,9 @@
+{{define "artist_album_row"}}
+<tr id="artist-album-row-{{.ID}}"{{if .OOB}} hx-swap-oob="true"{{end}}>
+  <td><a href="/music/albums/{{.ID}}">{{.Title}}</a>{{if .CompilationSeriesName}} <span class="chip chip-muted">{{.CompilationSeriesName}}</span>{{end}}</td>
+  <td class="nowrap">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</td>
+  <td class="nowrap">{{.Tracks}}</td>
+  <td>{{if .Monitored}}<span class="chip chip-good">Monitored</span>{{else}}<span class="chip chip-warn">Unmonitored</span>{{end}}</td>
+  <td>{{if .HasFiles}}<span class="chip chip-good">Downloaded</span>{{else}}<span class="chip chip-muted">Missing</span>{{end}}</td>
+</tr>
+{{end}}

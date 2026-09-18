@@ -10,7 +10,8 @@
   <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/fix-match" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Point this album at the right MusicBrainz release group">{{template "icon_target"}}<span>Fix Match</span></button>
   <a class="tool" href="/history?media=music" title="Everything that happened in the music library">{{template "icon_history"}}<span>History</span></a>
   <span class="tool-sep"></span>
-  <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/rename-preview" hx-target="#release-dialog-body" hx-swap="innerHTML" title="See which track files don't match the naming templates, and rename them">{{template "icon_wrench"}}<span>Preview Rename</span></button>
+  <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/manage-tracks" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Every file this album has: fix which track a file belongs to, or delete files">{{template "icon_file_edit"}}<span>Manage Track Files</span></button>
+  <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/rename-preview" hx-target="#release-dialog-body" hx-swap="innerHTML" title="See which track files do not match the naming templates, and rename them">{{template "icon_wrench"}}<span>Preview Rename</span></button>
   <button class="tool" type="button" hx-get="/music/albums/{{$album.ID}}/edit" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Monitoring">{{template "icon_wrench"}}<span>Edit</span></button>
   <button class="tool tool-danger" type="button" hx-get="/music/albums/{{$album.ID}}/delete" hx-target="#release-dialog-body" hx-swap="innerHTML" title="Remove the album, optionally with its files">{{template "icon_trash"}}<span>Delete</span></button>
 </div>
@@ -61,20 +62,14 @@
   {{if .Tracks}}
   {{$albumID := $album.ID}}
   {{$hasIndexer := .HasIndexer}}
+  <!-- Keeps each track row's status/quality current as a grab is imported,
+       without a page reload that would close an open Find release row. -->
+  <div hidden hx-get="/music/albums/{{$albumID}}/tracks/status" hx-trigger="load, every 5s" hx-swap="none"></div>
   <table class="data-table" data-table-id="tracks">
     <thead><tr><th>#</th><th>Title</th><th data-col="duration">Duration</th><th data-col="group">Release Group</th><th data-col="quality">Quality</th><th data-col="audio">Audio</th><th>Status</th><th></th></tr></thead>
     <tbody>
       {{range .Tracks}}
-      <tr>
-        <td>{{.TrackNumber}}</td>
-        <td>{{.Title}}</td>
-        <td data-col="duration">{{.Duration}}</td>
-        <td data-col="group">{{.ReleaseGroup}}</td>
-        <td data-col="quality">{{if .Quality}}<span class="chip chip-info">{{.Quality}}</span>{{end}}</td>
-        <td data-col="audio">{{.Audio}}</td>
-        <td>{{if .HasFile}}<span class="chip chip-good">{{.FileStatus}}</span>{{else}}<span class="chip chip-warn">{{.FileStatus}}</span>{{end}}</td>
-        <td>{{if $hasIndexer}}<button class="btn btn-sm btn-ghost" hx-get="/music/albums/{{$albumID}}/tracks/{{.ID}}/releases" hx-target="#release-dialog-body" hx-swap="innerHTML">Find release</button>{{end}}</td>
-      </tr>
+      {{template "track_row" .}}
       {{if $hasIndexer}}<tr><td colspan="8" id="track-releases-{{.ID}}"></td></tr>{{end}}
       {{end}}
     </tbody>

@@ -94,3 +94,24 @@ func TestArtistPage(t *testing.T) {
 		t.Errorf("want its albums gone too, got %d", albums)
 	}
 }
+
+// seedTestTrack gives an album one release with one track, which is what
+// the album page needs before it renders (and polls) any track rows.
+func seedTestTrack(t *testing.T, db *sql.DB, albumID int64) int64 {
+	t.Helper()
+	ctx := t.Context()
+	var artistMetadataID int64
+	if err := db.QueryRow(`SELECT artist_metadata_id FROM albums WHERE id = ?`, albumID).Scan(&artistMetadataID); err != nil {
+		t.Fatal(err)
+	}
+	releaseID, err := store.UpsertAlbumRelease(ctx, db, albumID, metadata.ReleaseMetadata{
+		Title: metadata.Field[string]{Value: "Homework", Provider: "musicbrainz"}, ExternalIDs: map[string]string{"musicbrainz": "hw-release"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	trackID, err := store.UpsertTrack(ctx, db, releaseID, artistMetadataID, metadata.TrackSource{Number: "1", Title: "Daftendirekt", MediumNumber: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return trackID
+}

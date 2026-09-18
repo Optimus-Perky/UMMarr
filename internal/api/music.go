@@ -289,6 +289,7 @@ func (h *handler) MusicAlbumAdd(w http.ResponseWriter, r *http.Request) {
 // trackView is a template-friendly projection of store.TrackDetail.
 type trackView struct {
 	ID           int64
+	AlbumID      int64
 	TrackNumber  string
 	Title        string
 	Duration     string
@@ -297,6 +298,10 @@ type trackView struct {
 	Quality      string
 	ReleaseGroup string
 	Audio        string
+	HasIndexer   bool
+	// OOB marks this row for an htmx out-of-band swap, so the album page's
+	// status poll can replace just this row (see AlbumTrackStatuses).
+	OOB bool
 }
 
 type albumDetailPageData struct {
@@ -324,27 +329,10 @@ func (h *handler) AlbumDetail(w http.ResponseWriter, r *http.Request) {
 	}
 	albumID := album.ID
 
-	tracks, err := store.ListTracksForAlbum(ctx, h.deps.DB, albumID)
+	views, err := h.trackViews(ctx, albumID, false)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
-	}
-
-	views := make([]trackView, 0, len(tracks))
-	for _, t := range tracks {
-		status := "Missing"
-		if t.HasFile {
-			status = "Downloaded"
-		}
-		duration := ""
-		if t.DurationMs.Valid {
-			duration = humanizeDuration(t.DurationMs.Int64)
-		}
-		views = append(views, trackView{
-			ID: t.ID, TrackNumber: t.TrackNumber, Title: t.Title, Duration: duration,
-			HasFile: t.HasFile, FileStatus: status,
-			Quality: t.Quality.String(), ReleaseGroup: t.Quality.ReleaseGroup, Audio: t.MediaInfo.TrackSummary(),
-		})
 	}
 
 	h.renderPage(w, "album_detail", albumDetailPageData{

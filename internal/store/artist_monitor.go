@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 )
 
@@ -86,4 +87,69 @@ func ApplyAlbumMonitorOption(ctx context.Context, q Queryer, artistID int64, opt
 		return fmt.Errorf("apply monitor option %q to artist %d: %w", option, artistID, err)
 	}
 	return nil
+}
+
+// AlbumPassAlbum is one album chip on the Album Pass page.
+type AlbumPassAlbum struct {
+	ID        int64
+	ArtistID  int64
+	Title     string
+	Year      int
+	Monitored bool
+	HasFiles  bool
+}
+
+// AlbumPassArtist is one row of the Album Pass page.
+type AlbumPassArtist struct {
+	ID        int64
+	Name      string
+	Monitored bool
+	Albums    []AlbumPassAlbum
+}
+
+// ListAlbumPass lists every artist with a chip per album - the music
+// counterpart of ListSeasonPass, for monitoring a whole library's albums
+// from one page.
+func ListAlbumPass(ctx context.Context, q Queryer) ([]AlbumPassArtist, error) {
+	rows, err := q.QueryContext(ctx, `
+		SELECT a.id, am.name, a.monitored, al.id, al.title,
+		       COALESCE(CAST(strftime('%Y', al.release_date) AS INTEGER), 0), al.monitored,
+		       EXISTS (SELECT 1 FROM album_releases r JOIN tracks t ON t.album_release_id = r.id
+		               WHERE r.album_id = al.id AND t.track_file_id IS NOT NULL)
+		FROM artists a
+		JOIN artist_metadata am ON am.id = a.artist_metadata_id
+		LEFT JOIN albums al ON al.artist_metadata_id = a.artist_metadata_id
+		ORDER BY am.sort_name, al.release_date, al.title`)
+	if err != nil {
+		return nil, fmt.Errorf("list album pass: %w", err)
+	}
+	defer rows.Close()
+	var list []AlbumPassArtist
+	index := map[int64]int{}
+	for rows.Next() {
+		var artistID int64
+		var name string
+		var artistMonitored bool
+		var albumID sql.NullInt64
+		var title sql.NullString
+		var year int
+		var albumMonitored, hasFiles bool
+		if err := rows.Scan(&artistID, &name, &artistMonitored, &albumID, &title, &year, &albumMonitored, &hasFiles); err != nil {
+			return nil, err
+		}
+		i, ok := index[artistID]
+		if !ok {
+			i = len(list)
+			index[artistID] = i
+			list = append(list, AlbumPassArtist{ID: artistID, Name: name, Monitored: artistMonitored})
+		}
+		// The LEFT JOIN gives an artist with no albums one null row.
+		if albumID.Valid {
+			list[i].Albums = append(list[i].Albums, AlbumPassAlbum{
+				ID: albumID.Int64, ArtistID: artistID, Title: title.String, Year: year,
+				Monitored: albumMonitored, HasFiles: hasFiles,
+			})
+		}
+	}
+	return list, rows.Err()
 }

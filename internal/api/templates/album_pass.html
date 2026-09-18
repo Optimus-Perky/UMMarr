@@ -1,0 +1,51 @@
+{{define "content"}}
+<div class="section-head"><h2>Album Pass</h2><span class="section-count">{{len .Rows}}</span><span class="section-actions"><a class="btn btn-sm btn-ghost" href="/music">Back to Music</a></span></div>
+{{if .Notice}}<p class="indexer-test ok">{{.Notice}}</p>{{end}}
+<p class="notice">Click an album to monitor or unmonitor it; a tick means it has files. Select artists to change their monitoring together with the bar at the bottom.</p>
+<div class="library-toolbar"><input class="library-search" id="album-pass-search" type="search" placeholder="Filter artists…" aria-label="Filter artists"><span class="library-shown" id="album-pass-shown"></span></div>
+<form id="album-pass-form" hx-post="/music/albumpass" hx-target="#album-pass-result" hx-swap="innerHTML">
+<table class="data-table season-pass">
+  <thead><tr><th class="col-tight"><input type="checkbox" id="album-pass-all" aria-label="Select all shown"></th><th>Monitored</th><th>Artist</th><th>Albums</th></tr></thead>
+  <tbody>
+  {{range .Rows}}
+  <tr data-title="{{.Name}}">
+    <td class="col-tight"><input type="checkbox" name="id" value="{{.ID}}" class="album-pass-check" aria-label="Select {{.Name}}"></td>
+    <td>{{template "monitored_chip" .MonitoredChip}}</td>
+    <td><a href="/music/artists/{{.ID}}">{{.Name}}</a></td>
+    <td class="season-chips">{{range .Albums}}{{template "album_pass_chip" .}}{{else}}<span class="card-sub">No albums yet</span>{{end}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="4" class="notice">No artists added yet.</td></tr>
+  {{end}}
+  </tbody>
+</table>
+<div class="editor-bar">
+  <span class="editor-count" id="album-pass-count">0 selected</span>
+  <label class="release-filter-label">Monitored <select class="select" name="monitored"><option value="">No Change</option><option value="true">Monitored</option><option value="false">Unmonitored</option></select></label>
+  <label class="release-filter-label">Monitor <select class="select" name="monitor"><option value="">No Change</option>{{range .MonitorOptions}}<option value="{{.Value}}" title="{{.Help}}">{{.Label}}</option>{{end}}</select></label>
+  <span class="manage-spacer"></span>
+  <button class="btn btn-sm" type="submit">Save</button>
+</div>
+<div id="album-pass-result"></div>
+</form>
+<script>
+(function () {
+  var search = document.getElementById('album-pass-search'), all = document.getElementById('album-pass-all');
+  var count = document.getElementById('album-pass-count'), shown = document.getElementById('album-pass-shown');
+  var rows = Array.prototype.slice.call(document.querySelectorAll('table.season-pass tbody tr[data-title]'));
+  function update() {
+    count.textContent = document.querySelectorAll('.album-pass-check:checked').length + ' selected';
+  }
+  search.addEventListener('input', function () {
+    var q = search.value.toLowerCase(), visible = 0;
+    rows.forEach(function (row) { row.hidden = q && row.dataset.title.toLowerCase().indexOf(q) < 0; if (!row.hidden) visible++; });
+    shown.textContent = visible === rows.length ? '' : visible + ' of ' + rows.length;
+  });
+  all.addEventListener('change', function () {
+    rows.forEach(function (row) { if (!row.hidden) row.querySelector('.album-pass-check').checked = all.checked; });
+    update();
+  });
+  document.querySelector('table.season-pass').addEventListener('change', function (e) { if (e.target.classList.contains('album-pass-check')) update(); });
+})();
+</script>
+{{end}}

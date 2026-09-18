@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -225,5 +226,250 @@ func (h *handler) AlbumDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("HX-Redirect", artistPage)
+	w.WriteHeader(http.StatusOK)
+}
+
+// trackViews builds an album's track rows. oob marks them for out-of-band
+// swaps, which is what the status poll below sends.
+func (h *handler) trackViews(ctx context.Context, albumID int64, oob bool) ([]trackView, error) {
+	tracks, err := store.ListTracksForAlbum(ctx, h.deps.DB, albumID)
+	if err != nil {
+		return nil, err
+	}
+	hasIndexer := h.deps.Indexer.Configured(ctx)
+	views := make([]trackView, 0, len(tracks))
+	for _, t := range tracks {
+		status := "Missing"
+		if t.HasFile {
+			status = "Downloaded"
+		}
+		duration := ""
+		if t.DurationMs.Valid {
+			duration = humanizeDuration(t.DurationMs.Int64)
+		}
+		views = append(views, trackView{
+			ID: t.ID, AlbumID: albumID, TrackNumber: t.TrackNumber, Title: t.Title, Duration: duration,
+			HasFile: t.HasFile, FileStatus: status,
+			Quality: t.Quality.String(), ReleaseGroup: t.Quality.ReleaseGroup, Audio: t.MediaInfo.TrackSummary(),
+			HasIndexer: hasIndexer, OOB: oob,
+		})
+	}
+	return views, nil
+}
+
+// AlbumTrackStatuses is the album page's live poll, the music counterpart
+// of SeriesEpisodeStatuses: each track row comes back as an out-of-band
+// swap, so a track that finishes downloading turns from Missing to
+// Downloaded without reloading the page and losing an open search result.
+func (h *handler) AlbumTrackStatuses(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	views, err := h.trackViews(r.Context(), albumID, true)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	for _, v := range views {
+		h.renderPartial(w, "track_row", v)
+	}
+}
+
+type trackFileView struct {
+	store.TrackFileDetail
+	SizeHuman string
+}
+
+type manageTracksData struct {
+	Album  store.AlbumDetail
+	Files  []trackFileView
+	Tracks []store.TrackDetail
+}
+
+// AlbumManageTracksForm is Manage Track Files: every file the album has,
+// with the track it's attached to. Unlike Manage Episodes there's no
+// quality editor - see store/track_file_edit.go for why.
+func (h *handler) AlbumManageTracksForm(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	ctx := r.Context()
+	album, found, err := store.GetAlbumDetail(ctx, h.deps.DB, albumID)
+	if err != nil || !found {
+		http.NotFound(w, r)
+		return
+	}
+	files, err := store.ListTrackFileDetails(ctx, h.deps.DB, albumID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	views := make([]trackFileView, 0, len(files))
+	for _, f := range files {
+		views = append(views, trackFileView{TrackFileDetail: f, SizeHuman: humanizeBytes(f.Size)})
+	}
+	tracks, err := store.ListTracksForAlbum(ctx, h.deps.DB, albumID)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	h.renderPartial(w, "album_manage_tracks", manageTracksData{Album: album, Files: views, Tracks: tracks})
+}
+
+// AlbumManageTracksApply re-maps files whose track select was changed.
+func (h *handler) AlbumManageTracksApply(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	files, err := store.ListTrackFileDetails(ctx, h.deps.DB, albumID)
+	if err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	remapped := 0
+	for _, f := range files {
+		v := r.FormValue(fmt.Sprintf("f%d_track", f.ID))
+		if v == "" {
+			continue
+		}
+		trackID, err := strconv.ParseInt(v, 10, 64)
+		if err != nil || trackID == f.TrackID {
+			continue
+		}
+		if err := store.RemapTrackFile(ctx, h.deps.DB, albumID, f.ID, trackID); err != nil {
+			renderInlineError(w, err.Error())
+			return
+		}
+		remapped++
+	}
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albums/%d?remapped=%d", albumID, remapped))
+	w.WriteHeader(http.StatusOK)
+}
+
+// AlbumDeleteTrackFiles removes the ticked files.
+func (h *handler) AlbumDeleteTrackFiles(w http.ResponseWriter, r *http.Request) {
+	albumID, ok := pathID(w, r, "id", "album")
+	if !ok {
+		return
+	}
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ids := h.renameFileIDs(r)
+	if len(ids) == 0 {
+		renderInlineError(w, "Tick at least one file.")
+		return
+	}
+	removed, err := h.deps.Import.DeleteTrackFiles(r.Context(), albumID, ids)
+	if err != nil {
+		renderInlineError(w, err.Error())
+		return
+	}
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albums/%d?deleted=%d", albumID, removed))
+	w.WriteHeader(http.StatusOK)
+}
+
+type albumPassRow struct {
+	store.AlbumPassArtist
+	MonitoredChip monitoredChipView
+}
+
+type albumPassPageData struct {
+	Active         string
+	PageTitle      string
+	Notice         string
+	Rows           []albumPassRow
+	MonitorOptions []store.MonitorOption
+}
+
+// AlbumPass is the music counterpart of Season Pass: every artist with a
+// chip per album, so a library's album monitoring can be set from one page.
+func (h *handler) AlbumPass(w http.ResponseWriter, r *http.Request) {
+	list, err := store.ListAlbumPass(r.Context(), h.deps.DB)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rows := make([]albumPassRow, 0, len(list))
+	for _, a := range list {
+		rows = append(rows, albumPassRow{AlbumPassArtist: a, MonitoredChip: monitoredChipView{
+			Monitored: a.Monitored, ToggleURL: fmt.Sprintf("/music/artists/%d/monitored", a.ID),
+			LabelOn: "Monitored", LabelOff: "Unmonitored",
+		}})
+	}
+	notice := ""
+	if v := r.URL.Query().Get("saved"); v != "" {
+		n, _ := strconv.Atoi(v)
+		notice = fmt.Sprintf("Album Pass saved for %d artist(s).", n)
+	}
+	h.renderPage(w, "album_pass", albumPassPageData{Active: "music", PageTitle: "Album Pass", Notice: notice, Rows: rows, MonitorOptions: store.AlbumMonitorOptions})
+}
+
+// AlbumPassToggle flips one album's monitored flag and re-renders its chip.
+func (h *handler) AlbumPassToggle(w http.ResponseWriter, r *http.Request) {
+	albumID, err := strconv.ParseInt(r.URL.Query().Get("album"), 10, 64)
+	artistID, err2 := strconv.ParseInt(r.URL.Query().Get("artist"), 10, 64)
+	if err != nil || err2 != nil {
+		http.Error(w, "invalid artist or album", http.StatusBadRequest)
+		return
+	}
+	ctx := r.Context()
+	album, found, err := store.GetAlbumDetail(ctx, h.deps.DB, albumID)
+	if err != nil || !found {
+		http.NotFound(w, r)
+		return
+	}
+	monitored := !album.Monitored
+	if err := store.UpdateAlbumMonitored(ctx, h.deps.DB, albumID, monitored); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	year := 0
+	if album.Year.Valid {
+		year = int(album.Year.Int64)
+	}
+	h.renderPartial(w, "album_pass_chip", store.AlbumPassAlbum{
+		ID: albumID, ArtistID: artistID, Title: album.Title, Year: year, Monitored: monitored,
+	})
+}
+
+// AlbumPassSave applies the bar at the bottom to every ticked artist.
+func (h *handler) AlbumPassSave(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseForm(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	ids := selectedIDs(r)
+	if len(ids) == 0 {
+		renderInlineError(w, "Tick at least one artist.")
+		return
+	}
+	ctx := r.Context()
+	for _, id := range ids {
+		switch r.FormValue("monitored") {
+		case "true", "false":
+			if err := store.UpdateArtistMonitored(ctx, h.deps.DB, id, r.FormValue("monitored") == "true"); err != nil {
+				renderInlineError(w, err.Error())
+				return
+			}
+		}
+		if option := r.FormValue("monitor"); option != "" {
+			if err := store.ApplyAlbumMonitorOption(ctx, h.deps.DB, id, option); err != nil {
+				renderInlineError(w, err.Error())
+				return
+			}
+		}
+	}
+	w.Header().Set("HX-Redirect", fmt.Sprintf("/music/albumpass?saved=%d", len(ids)))
 	w.WriteHeader(http.StatusOK)
 }

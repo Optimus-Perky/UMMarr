@@ -147,3 +147,121 @@ func TestAlbumDelete_RemovesTheAlbumAndReturnsToTheArtist(t *testing.T) {
 		t.Error("want the artist kept when only an album is deleted")
 	}
 }
+
+// The artist and album pages poll for row updates, the way the series page
+// does: each row comes back as an htmx out-of-band swap, so a grab landing
+// updates the row in place instead of reloading the page and closing an
+// open Find release row.
+func TestMusicPages_PollRowsOutOfBand(t *testing.T) {
+	db := openTestDB(t)
+	artistID, albumID := seedTestArtist(t, db)
+	srv := newTestServerWithDB(t, db)
+
+	_, body := get(t, srv, "/music/artists/"+itoa(artistID))
+	if !strings.Contains(body, `hx-get="/music/artists/`+itoa(artistID)+`/albums/status"`) {
+		t.Error("want the artist page polling its album rows")
+	}
+	status, rows := get(t, srv, "/music/artists/"+itoa(artistID)+"/albums/status")
+	if status != 200 {
+		t.Fatalf("album status = %d", status)
+	}
+	if !strings.Contains(rows, `id="artist-album-row-`+itoa(albumID)+`"`) || !strings.Contains(rows, `hx-swap-oob="true"`) {
+		t.Errorf("want the album row as an out-of-band swap, got:\n%s", rows)
+	}
+
+	// The album page only polls once it has tracks to update, so give it
+	// one.
+	trackID := seedTestTrack(t, db, albumID)
+	_, body = get(t, srv, "/music/albums/"+itoa(albumID))
+	if !strings.Contains(body, `hx-get="/music/albums/`+itoa(albumID)+`/tracks/status"`) {
+		t.Error("want the album page polling its track rows")
+	}
+	status, rows = get(t, srv, "/music/albums/"+itoa(albumID)+"/tracks/status")
+	if status != 200 {
+		t.Fatalf("track status = %d: %s", status, rows)
+	}
+	if !strings.Contains(rows, `id="track-row-`+itoa(trackID)+`"`) || !strings.Contains(rows, `hx-swap-oob="true"`) {
+		t.Errorf("want the track row as an out-of-band swap, got:\n%s", rows)
+	}
+}
+
+func TestAlbumManageTracks_ListsFilesAndRemaps(t *testing.T) {
+	db := openTestDB(t)
+	_, albumID := seedTestArtist(t, db)
+	srv := newTestServerWithDB(t, db)
+	id := itoa(albumID)
+
+	_, body := get(t, srv, "/music/albums/"+id)
+	if !strings.Contains(body, `hx-get="/music/albums/`+id+`/manage-tracks"`) || !strings.Contains(body, "Manage Track Files") {
+		t.Error("want Manage Track Files on the album page")
+	}
+	status, body := get(t, srv, "/music/albums/"+id+"/manage-tracks")
+	if status != 200 {
+		t.Fatalf("manage tracks = %d", status)
+	}
+	// A seeded album has no files, and the dialog should say so rather
+	// than rendering an empty table with a Delete button.
+	if !strings.Contains(body, "no files yet") {
+		t.Errorf("want the empty case explained, got:\n%s", body)
+	}
+}
+
+// Album Pass is Season Pass for music: every artist with a chip per album,
+// clickable to monitor, plus a bar that applies a monitor option to the
+// ticked artists.
+func TestAlbumPass_ListsAlbumsAndTogglesOne(t *testing.T) {
+	db := openTestDB(t)
+	artistID, albumID := seedTestArtist(t, db)
+	srv := newTestServerWithDB(t, db)
+
+	_, body := get(t, srv, "/music")
+	if !strings.Contains(body, `href="/music/albumpass"`) {
+		t.Error("want Album Pass linked from the Music page")
+	}
+	status, body := get(t, srv, "/music/albumpass")
+	if status != 200 {
+		t.Fatalf("album pass = %d", status)
+	}
+	if !strings.Contains(body, "Daft Punk") || !strings.Contains(body, "Homework") {
+		t.Errorf("want the artist and its album listed, got:\n%s", body)
+	}
+
+	monitored := func() bool {
+		var m bool
+		if err := db.QueryRow(`SELECT monitored FROM albums WHERE id = ?`, albumID).Scan(&m); err != nil {
+			t.Fatalf("read album: %v", err)
+		}
+		return m
+	}
+	resp, chip := postForm(t, srv, "/music/albumpass/toggle?artist="+itoa(artistID)+"&album="+itoa(albumID), nil)
+	if resp.StatusCode != 200 {
+		t.Fatalf("toggle = %d: %s", resp.StatusCode, chip)
+	}
+	if monitored() {
+		t.Error("want the album unmonitored after one click")
+	}
+	if !strings.Contains(chip, "click to monitor") {
+		t.Errorf("want the chip re-rendered in its new state, got: %s", chip)
+	}
+}
+
+func TestAlbumPassSave_AppliesAMonitorOptionToTickedArtists(t *testing.T) {
+	db := openTestDB(t)
+	artistID, albumID := seedTestArtist(t, db)
+	srv := newTestServerWithDB(t, db)
+
+	resp, body := postForm(t, srv, "/music/albumpass", url.Values{"id": {itoa(artistID)}, "monitor": {"none"}})
+	if resp.StatusCode != 200 {
+		t.Fatalf("save = %d: %s", resp.StatusCode, body)
+	}
+	var monitored bool
+	if err := db.QueryRow(`SELECT monitored FROM albums WHERE id = ?`, albumID).Scan(&monitored); err != nil {
+		t.Fatalf("read album: %v", err)
+	}
+	if monitored {
+		t.Error("want None applied to the ticked artist's albums")
+	}
+	if _, body := postForm(t, srv, "/music/albumpass", url.Values{"monitor": {"all"}}); !strings.Contains(body, "Tick at least one artist") {
+		t.Errorf("want an empty selection refused, got: %s", body)
+	}
+}

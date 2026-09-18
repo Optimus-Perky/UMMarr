@@ -2,9 +2,11 @@ package sync
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
@@ -172,4 +174,53 @@ func (s *ImportService) albumOfTrackFile(ctx context.Context, fileID int64) (int
 		JOIN album_releases ar ON ar.id = t.album_release_id
 		WHERE t.track_file_id = ?`, fileID).Scan(&albumID)
 	return albumID, err
+}
+
+// DeleteTrackFiles removes the chosen track files from disk (via the
+// recycle bin when one is configured) and drops their rows, so the tracks
+// read as missing again. The music counterpart of DeleteEpisodeFiles.
+func (s *ImportService) DeleteTrackFiles(ctx context.Context, albumID int64, fileIDs []int64) (int, error) {
+	album, found, err := store.GetAlbumDetail(ctx, s.DB, albumID)
+	if err != nil || !found {
+		return 0, err
+	}
+	files, err := store.ListTrackFileDetails(ctx, s.DB, albumID)
+	if err != nil {
+		return 0, err
+	}
+	ms, err := store.GetMediaSettings(ctx, s.DB)
+	if err != nil {
+		return 0, err
+	}
+	chosen := map[int64]bool{}
+	for _, id := range fileIDs {
+		chosen[id] = true
+	}
+	removed := 0
+	var names []string
+	for _, f := range files {
+		if !chosen[f.ID] {
+			continue
+		}
+		if album.Path.Valid {
+			full := filepath.Join(album.Path.String, f.RelativePath)
+			if err := importer.RecycleOrRemove(full, ms.RecycleBinPath); err != nil {
+				return removed, fmt.Errorf("remove %s: %w", full, err)
+			}
+		}
+		if err := store.WithTx(ctx, s.DB, func(tx *sql.Tx) error {
+			return store.DeleteTrackFile(ctx, tx, f.ID)
+		}); err != nil {
+			return removed, err
+		}
+		removed++
+		names = append(names, filepath.Base(f.RelativePath))
+	}
+	if removed > 0 {
+		e := albumEvent(ctx, s.DB, albumID, store.EventDeleted)
+		e.Detail = fmt.Sprintf("%d file(s) removed: %s", removed, strings.Join(names, ", "))
+		e.Source = "manage track files"
+		s.Events.Record(ctx, e)
+	}
+	return removed, nil
 }

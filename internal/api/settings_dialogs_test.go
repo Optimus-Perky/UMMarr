@@ -2,6 +2,7 @@ package api_test
 
 import (
 	"net/http/httptest"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -89,6 +90,38 @@ func TestSettingsTabs_DialogOpenerIsGeneric(t *testing.T) {
 		// will be dead on arrival again.
 		if strings.Contains(body, "getElementById('indexer-dialog')") {
 			t.Errorf("/settings/%s: the opener still names dialogs one by one", tab)
+		}
+	}
+}
+
+// Every page template has to be listed in pageFiles or renderPage panics
+// on a nil template - which is a 500 for that whole page, and only shows
+// up when someone opens it. album_pass.html shipped unregistered exactly
+// once; this makes the next one fail here instead.
+func TestEveryPageTemplateIsRegistered(t *testing.T) {
+	entries, err := os.ReadDir("templates")
+	if err != nil {
+		t.Fatalf("read templates: %v", err)
+	}
+	registered := map[string]bool{}
+	source, err := os.ReadFile("api.go")
+	if err != nil {
+		t.Fatalf("read api.go: %v", err)
+	}
+	for _, m := range regexp.MustCompile(`"templates/([a-z_]+\.html)"`).FindAllStringSubmatch(string(source), -1) {
+		registered[m[1]] = true
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".html") {
+			continue
+		}
+		// base.html and login.html are parsed by name, not through pageFiles.
+		if name == "base.html" || name == "login.html" {
+			continue
+		}
+		if !registered[name] {
+			t.Errorf("templates/%s isn't listed in api.go's pageFiles, so rendering it panics", name)
 		}
 	}
 }

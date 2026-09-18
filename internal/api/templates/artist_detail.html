@@ -44,17 +44,14 @@
 <div class="section-head"><h2>Albums</h2><span class="section-count">{{len .Albums}}</span></div>
 <div class="panel">
   {{if .Albums}}
+  <!-- Each album row refreshes itself as its tracks are imported, so a
+       grab finishing shows up without reloading the page. -->
+  <div hidden hx-get="/music/artists/{{$a.ID}}/albums/status" hx-trigger="load, every 5s" hx-swap="none"></div>
   <table class="data-table">
     <thead><tr><th>Album</th><th>Year</th><th>Tracks</th><th>Monitored</th><th></th></tr></thead>
     <tbody>
       {{range .Albums}}
-      <tr>
-        <td><a href="/music/albums/{{.ID}}">{{.Title}}</a>{{if .CompilationSeriesName}} <span class="chip chip-muted">{{.CompilationSeriesName}}</span>{{end}}</td>
-        <td class="nowrap">{{if .Year.Valid}}{{.Year.Int64}}{{end}}</td>
-        <td class="nowrap">{{.Tracks}}</td>
-        <td>{{if .Monitored}}<span class="chip chip-good">Monitored</span>{{else}}<span class="chip chip-warn">Unmonitored</span>{{end}}</td>
-        <td>{{if .HasFiles}}<span class="chip chip-good">Downloaded</span>{{else}}<span class="chip chip-muted">Missing</span>{{end}}</td>
-      </tr>
+      {{template "artist_album_row" .}}
       {{end}}
     </tbody>
   </table>

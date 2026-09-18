@@ -18,6 +18,9 @@ type artistAlbumView struct {
 	store.AlbumSummary
 	HasFiles bool
 	Tracks   string // "9 / 12"
+	// OOB marks the row for an htmx out-of-band swap, so the artist page's
+	// status poll can replace it in place (see ArtistAlbumStatuses).
+	OOB bool
 }
 
 type artistPageData struct {
@@ -57,20 +60,13 @@ func (h *handler) ArtistDetail(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	albums, err := store.ListAlbumsForArtist(ctx, h.deps.DB, artist.ArtistMetadataID)
+	data := artistPageData{Active: "music", PageTitle: artist.Name, Artist: artist, SizeHuman: humanizeBytes(artist.SizeOnDisk)}
+	albumViews, err := h.artistAlbumViews(ctx, artist.ArtistMetadataID, false)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	data := artistPageData{Active: "music", PageTitle: artist.Name, Artist: artist, SizeHuman: humanizeBytes(artist.SizeOnDisk)}
-	for _, album := range albums {
-		view := artistAlbumView{AlbumSummary: album}
-		if wanted, err := store.GetWantedAlbum(ctx, h.deps.DB, album.ID); err == nil {
-			view.HasFiles = wanted.FileCount() > 0
-			view.Tracks = fmt.Sprintf("%d / %d", wanted.FileCount(), len(wanted.Tracks))
-		}
-		data.Albums = append(data.Albums, view)
-	}
+	data.Albums = albumViews
 	data.HasIndexer = h.deps.Indexer.Configured(ctx)
 	data.Profiles, _ = store.ListQualityProfiles(ctx, h.deps.DB)
 	data.RootFolders, _ = store.ListRootFolders(ctx, h.deps.DB, "music")
@@ -368,4 +364,42 @@ func (h *handler) MusicEditorSearch(w http.ResponseWriter, r *http.Request) {
 	}()
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<p class="notice">Searching %d artist(s) in the background - grabs show up in Activity.</p>`, len(ids))
+}
+
+// artistAlbumViews builds the artist page's album rows. oob marks them for
+// out-of-band swaps, which is what ArtistAlbumStatuses sends.
+func (h *handler) artistAlbumViews(ctx context.Context, artistMetadataID int64, oob bool) ([]artistAlbumView, error) {
+	albums, err := store.ListAlbumsForArtist(ctx, h.deps.DB, artistMetadataID)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]artistAlbumView, 0, len(albums))
+	for _, album := range albums {
+		view := artistAlbumView{AlbumSummary: album, OOB: oob}
+		if wanted, err := store.GetWantedAlbum(ctx, h.deps.DB, album.ID); err == nil {
+			view.HasFiles = wanted.FileCount() > 0
+			view.Tracks = fmt.Sprintf("%d / %d", wanted.FileCount(), len(wanted.Tracks))
+		}
+		views = append(views, view)
+	}
+	return views, nil
+}
+
+// ArtistAlbumStatuses is the artist page's live poll: each album row comes
+// back as an out-of-band swap, so an album whose tracks have just been
+// imported flips to Downloaded without a page reload.
+func (h *handler) ArtistAlbumStatuses(w http.ResponseWriter, r *http.Request) {
+	artist, ok := h.artistFromPath(w, r)
+	if !ok {
+		return
+	}
+	views, err := h.artistAlbumViews(r.Context(), artist.ArtistMetadataID, true)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	for _, v := range views {
+		h.renderPartial(w, "artist_album_row", v)
+	}
 }

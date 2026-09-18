@@ -162,3 +162,47 @@ func TestListUpgradableAlbums_OnlyAlbumsWithFiles(t *testing.T) {
 		t.Fatalf("want one file quality for the imported track, got %d", len(qualities))
 	}
 }
+
+// Albums match their files positionally, so a file can land on the wrong
+// track. Remapping moves it, leaves the track it came from empty, and
+// never lets two tracks share one file row.
+func TestRemapTrackFile(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	_, withFiles, _, _ := seedMonitorArtist(t, db)
+
+	var releaseID int64
+	if err := db.QueryRow(`SELECT id FROM album_releases WHERE album_id = ?`, withFiles).Scan(&releaseID); err != nil {
+		t.Fatalf("find release: %v", err)
+	}
+	second, err := store.UpsertTrack(ctx, db, releaseID, 1, metadata.TrackSource{Number: "2", Title: "Sour Times", MediumNumber: 1})
+	if err != nil {
+		t.Fatalf("second track: %v", err)
+	}
+	files, err := store.ListTrackFileDetails(ctx, db, withFiles)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("list track files: %v %+v", err, files)
+	}
+	first := files[0]
+
+	if err := store.RemapTrackFile(ctx, db, withFiles, first.ID, second); err != nil {
+		t.Fatalf("remap: %v", err)
+	}
+	files, err = store.ListTrackFileDetails(ctx, db, withFiles)
+	if err != nil || len(files) != 1 {
+		t.Fatalf("after remap: %v %+v", err, files)
+	}
+	if files[0].TrackID != second {
+		t.Errorf("want the file on track %d, got %d", second, files[0].TrackID)
+	}
+	var onOldTrack sql.NullInt64
+	if err := db.QueryRow(`SELECT track_file_id FROM tracks WHERE id = ?`, first.TrackID).Scan(&onOldTrack); err != nil {
+		t.Fatalf("read old track: %v", err)
+	}
+	if onOldTrack.Valid {
+		t.Error("want the track it came from left with no file")
+	}
+	if err := store.RemapTrackFile(ctx, db, withFiles, first.ID, 99999); err == nil {
+		t.Error("want a track from another album refused")
+	}
+}

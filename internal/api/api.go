@@ -144,6 +144,7 @@ var pageFiles = map[string]string{
 	"activity":             "templates/activity.html",
 	"history":              "templates/history.html",
 	"season_pass":          "templates/season_pass.html",
+	"album_pass":           "templates/album_pass.html",
 	"scan_report":          "templates/scan_report.html",
 	"calendar":             "templates/calendar.html",
 	"system":               "templates/system.html",

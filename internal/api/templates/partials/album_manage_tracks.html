@@ -1,0 +1,43 @@
+{{define "album_manage_tracks"}}
+{{$album := .Album}}
+<form hx-post="/music/albums/{{$album.ID}}/manage-tracks" hx-target="#manage-tracks-result" hx-swap="innerHTML">
+  <div class="guide-head">
+    <h2>Manage Track Files - {{$album.Title}}</h2>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Close</button>
+  </div>
+  <div class="guide-body">
+    {{if .Files}}
+    <p class="notice">Albums match their files by position, so one missing track in a rip shifts every file after it onto the wrong title. Point a file at the right track here, or tick files to delete them.</p>
+    <table class="data-table">
+      <thead><tr><th></th><th>File</th><th>Size</th><th>Audio</th><th>Track</th></tr></thead>
+      <tbody>
+        {{range .Files}}
+        <tr>
+          <td class="col-tight"><input type="checkbox" name="file_id" value="{{.ID}}" form="album-delete-files"></td>
+          <td class="wrap">{{.RelativePath}}</td>
+          <td class="nowrap">{{.SizeHuman}}</td>
+          <td class="nowrap">{{if .Audio}}{{.Audio}}{{else}}<span class="setting-help">not analyzed</span>{{end}}</td>
+          <td>
+            <select name="f{{.ID}}_track">
+              {{$current := .TrackID}}
+              {{range $.Tracks}}<option value="{{.ID}}"{{if eq .ID $current}} selected{{end}}>{{.TrackNumber}} - {{.Title}}</option>{{end}}
+            </select>
+          </td>
+        </tr>
+        {{end}}
+      </tbody>
+    </table>
+    {{else}}
+    <p class="notice">This album has no files yet.</p>
+    {{end}}
+    <div id="manage-tracks-result"></div>
+  </div>
+  <div class="dialog-foot">
+    {{if .Files}}<button class="btn btn-sm btn-danger" type="submit" form="album-delete-files" hx-confirm="Delete the ticked files? They go to the recycle bin when one is configured.">Delete Files</button>{{end}}
+    <span class="dialog-foot-spacer"></span>
+    <button class="btn btn-sm btn-ghost" type="button" onclick="this.closest('dialog').close()">Cancel</button>
+    {{if .Files}}<button class="btn btn-sm" type="submit">Save Track Mapping</button>{{end}}
+  </div>
+</form>
+<form id="album-delete-files" hx-post="/music/albums/{{$album.ID}}/manage-tracks/delete" hx-target="#manage-tracks-result" hx-swap="innerHTML"></form>
+{{end}}
