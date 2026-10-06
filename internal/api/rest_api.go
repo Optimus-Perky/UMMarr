@@ -173,7 +173,7 @@ func (h *handler) ApiAddMovie(w http.ResponseWriter, r *http.Request) {
 	}
 	h.recordItemEvent(r, store.EventAdded, "movie", movieID, 0, 0, "Added through the API", "api")
 	if body.SearchNow && h.deps.Search != nil {
-		go h.deps.Search.SearchMovie(context.Background(), movieID)
+		h.deps.Search.InBackground("api movie search", func(ctx context.Context) { h.deps.Search.SearchMovie(ctx, movieID) })
 	}
 	h.writeMovie(w, r, movieID, http.StatusCreated)
 }
@@ -713,21 +713,21 @@ func (h *handler) ApiCommand(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		for _, id := range body.MovieIDs {
-			go h.deps.Search.SearchMovie(context.Background(), id)
+			h.deps.Search.InBackground("api movie search", func(ctx context.Context) { h.deps.Search.SearchMovie(ctx, id) })
 		}
 	case "SeriesSearch":
 		if h.deps.Search == nil || body.SeriesID <= 0 {
 			apiError(w, http.StatusBadRequest, "seriesId is required")
 			return
 		}
-		go h.deps.Search.SearchSeries(context.Background(), body.SeriesID, nil)
+		h.deps.Search.InBackground("api series search", func(ctx context.Context) { h.deps.Search.SearchSeries(ctx, body.SeriesID, nil) })
 	case "AlbumSearch":
 		if h.deps.Search == nil {
 			apiError(w, http.StatusServiceUnavailable, "search isn't available")
 			return
 		}
 		for _, id := range body.AlbumIDs {
-			go h.deps.Search.SearchAlbum(context.Background(), id)
+			h.deps.Search.InBackground("api album search", func(ctx context.Context) { h.deps.Search.SearchAlbum(ctx, id) })
 		}
 	case "MissingMoviesSearch", "MissingEpisodeSearch", "MissingAlbumSearch", "CutoffUnmetMoviesSearch", "CutoffUnmetEpisodeSearch":
 		if h.deps.Search == nil {

@@ -83,8 +83,8 @@ type Deps struct {
 	Updates   *updates.Checker
 	DBPath    string
 	StartedAt time.Time
-	// Restart exits the process so the container's restart policy brings it
-	// back - how a staged restore is applied.
+	// Restart shuts the server down cleanly and exits, so the container's
+	// restart policy brings it back - how a staged restore is applied.
 	Restart func()
 	// URLBase is the configured URL base, reported by the API.
 	URLBase string

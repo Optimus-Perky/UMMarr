@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/decision"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -151,7 +152,7 @@ func (h *handler) SeriesAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	h.recordItemEvent(r, store.EventAdded, "series", 0, seriesID, 0, "Added from search", "interactive")
 	if h.deps.Metadata != nil {
-		go h.deps.Metadata.WriteSeries(context.Background(), seriesID)
+		safego.Go("write series metadata", func() { h.deps.Metadata.WriteSeries(context.Background(), seriesID) })
 	}
 
 	w.Header().Set("HX-Redirect", "/tv")

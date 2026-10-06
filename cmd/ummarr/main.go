@@ -14,13 +14,16 @@ import (
 	"context"
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -41,6 +44,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/nfo"
 	"github.com/Optimus-Perky/UMMarr/internal/notify"
 	"github.com/Optimus-Perky/UMMarr/internal/proxy"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
 	"github.com/Optimus-Perky/UMMarr/internal/tasks"
@@ -269,6 +273,12 @@ func main() {
 		Use:   "serve",
 		Short: "Run the UMMarr web UI and API",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			// Everything long-running hangs off ctx: SIGTERM (docker stop),
+			// Ctrl-C, or a restart to apply a restored backup cancels it, and
+			// the server then shuts down rather than dying mid-import.
+			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
+			defer stop()
+
 			if applied, err := backup.ApplyPending(dbPath); err != nil {
 				return err
 			} else if applied {
@@ -414,12 +424,12 @@ func main() {
 
 			// Turn the old single Prowlarr connection into indexers, retrying
 			// hourly while Prowlarr can't be reached.
-			go func() {
+			safego.Go("convert prowlarr connection", func() {
 				conversion := sync.ProwlarrConversion{
 					BootstrapBaseURL: cfg.ProwlarrBaseURL, BootstrapAPIKey: cfg.ProwlarrAPIKey, UserAgent: cfg.UserAgent,
 				}
 				for {
-					created, err := sync.ConvertProwlarrConnection(context.Background(), db, conversion)
+					created, err := sync.ConvertProwlarrConnection(ctx, db, conversion)
 					if err == nil {
 						if created > 0 {
 							log.Printf("converted the Prowlarr connection into %d indexers", created)
@@ -427,9 +437,13 @@ func main() {
 						return
 					}
 					log.Printf("convert prowlarr connection (trying again in an hour): %v", err)
-					time.Sleep(time.Hour)
+					select {
+					case <-ctx.Done():
+						return
+					case <-time.After(time.Hour):
+					}
 				}
-			}()
+			})
 
 			// Background jobs, on the System → Tasks page and runnable from it.
 			scheduler := tasks.New()
@@ -532,13 +546,13 @@ func main() {
 					}
 					return nil
 				}})
-			scheduler.Start(context.Background(), 30*time.Second)
+			scheduler.Start(ctx, 30*time.Second)
 			deps.Tasks, deps.Health, deps.Backups, deps.Updates = scheduler, healthChecker, backups, updateChecker
 			deps.DBPath, deps.StartedAt = dbPath, time.Now()
 			deps.URLBase = urlbase.Normalize(appSettings.Host.URLBase)
 			deps.Restart = func() {
 				log.Println("restarting to apply a restored backup")
-				os.Exit(0)
+				stop()
 			}
 
 			host := appSettings.Host
@@ -553,17 +567,32 @@ func main() {
 			if base := urlbase.Normalize(host.URLBase); base != "" {
 				log.Printf("serving under the URL base %s", base)
 			}
+			servers := []*http.Server{newHTTPServer(cfg.ListenAddr, router)}
 			if host.SSLEnabled {
+				tlsServer := newHTTPServer(fmt.Sprintf(":%d", host.SSLPort), router)
+				servers = append(servers, tlsServer)
 				go func() {
-					addr := fmt.Sprintf(":%d", host.SSLPort)
-					log.Printf("UMMarr listening with SSL on %s", addr)
-					if err := http.ListenAndServeTLS(addr, host.SSLCertPath, host.SSLKeyPath, router); err != nil {
+					log.Printf("UMMarr listening with SSL on %s", tlsServer.Addr)
+					if err := tlsServer.ListenAndServeTLS(host.SSLCertPath, host.SSLKeyPath); err != nil && !errors.Is(err, http.ErrServerClosed) {
 						log.Printf("ssl listener failed: %v", err)
 					}
 				}()
 			}
-			fmt.Println("UMMarr listening on", cfg.ListenAddr)
-			return http.ListenAndServe(cfg.ListenAddr, router)
+			serveErr := make(chan error, 1)
+			go func() {
+				fmt.Println("UMMarr listening on", cfg.ListenAddr)
+				serveErr <- servers[0].ListenAndServe()
+			}()
+
+			select {
+			case err := <-serveErr:
+				if !errors.Is(err, http.ErrServerClosed) {
+					return err
+				}
+			case <-ctx.Done():
+			}
+			shutdown(servers)
+			return nil
 		},
 	})
 
@@ -588,6 +617,44 @@ func main() {
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
+	}
+}
+
+// newHTTPServer is the server for one listen address. Only the request
+// headers are given a deadline: whole-request timeouts would cut off a
+// backup download or a slow htmx poll, while a client that never finishes
+// its headers (the slowloris trick) is dropped after ten seconds.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       2 * time.Minute,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
+// shutdownGrace is how long a shutdown waits for requests and background
+// work - an import mid-copy, a search - before giving up on them. Docker
+// waits 10 seconds after SIGTERM by default before killing the container;
+// docker-compose.yml raises that with stop_grace_period so this gets the
+// chance to finish.
+const shutdownGrace = 30 * time.Second
+
+// shutdown stops accepting connections, lets requests in flight finish,
+// then waits for the background goroutines, all within shutdownGrace.
+func shutdown(servers []*http.Server) {
+	log.Println("shutting down: finishing requests and background work")
+	deadline := time.Now().Add(shutdownGrace)
+	ctx, cancel := context.WithDeadline(context.Background(), deadline)
+	defer cancel()
+	for _, srv := range servers {
+		if err := srv.Shutdown(ctx); err != nil {
+			log.Printf("shutdown %s: %v", srv.Addr, err)
+		}
+	}
+	if !safego.Wait(time.Until(deadline)) {
+		log.Println("shutdown: background work still running after the grace period - stopping anyway")
 	}
 }
 

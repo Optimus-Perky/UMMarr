@@ -9,6 +9,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 )
 
 // Task is one job. Interval 0 means it only runs when asked.
@@ -59,7 +61,7 @@ func (s *Scheduler) Register(t *Task) {
 
 // Start ticks every tick, running whatever is due, until ctx ends.
 func (s *Scheduler) Start(ctx context.Context, tick time.Duration) {
-	go func() {
+	safego.Go("task scheduler", func() {
 		ticker := time.NewTicker(tick)
 		defer ticker.Stop()
 		for {
@@ -70,7 +72,7 @@ func (s *Scheduler) Start(ctx context.Context, tick time.Duration) {
 				s.runDue(ctx)
 			}
 		}
-	}()
+	})
 }
 
 func (s *Scheduler) runDue(ctx context.Context) {
@@ -86,7 +88,7 @@ func (s *Scheduler) runDue(ctx context.Context) {
 		due := !t.running && (t.lastStarted.IsZero() || now.Sub(t.lastStarted) >= t.Interval)
 		t.mu.Unlock()
 		if due {
-			go s.run(ctx, t)
+			safego.Go("task "+t.Name, func() { s.run(ctx, t) })
 		}
 	}
 }
@@ -99,7 +101,12 @@ func (s *Scheduler) run(ctx context.Context, t *Task) {
 	}
 	t.running, t.lastStarted = true, s.now()
 	t.mu.Unlock()
-	err := t.Run(ctx)
+	// A task that panics is recorded as failed, like any other error, and
+	// runs again next time it's due.
+	var err error
+	if panicErr := safego.Run("task "+t.Name, func() { err = t.Run(ctx) }); panicErr != nil {
+		err = panicErr
+	}
 	t.mu.Lock()
 	t.running, t.lastFinished = false, s.now()
 	t.lastDuration = t.lastFinished.Sub(t.lastStarted)
@@ -127,7 +134,7 @@ func (s *Scheduler) RunNow(ctx context.Context, name string) error {
 		if running {
 			return fmt.Errorf("%s is already running", name)
 		}
-		go s.run(context.WithoutCancel(ctx), t)
+		safego.Go("task "+t.Name, func() { s.run(context.WithoutCancel(ctx), t) })
 		return nil
 	}
 	return fmt.Errorf("no task called %q", name)

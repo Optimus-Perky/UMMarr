@@ -11,6 +11,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/backup"
 	"github.com/Optimus-Perky/UMMarr/internal/health"
 	"github.com/Optimus-Perky/UMMarr/internal/logbuf"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/tasks"
 	"github.com/Optimus-Perky/UMMarr/internal/updates"
 	"github.com/Optimus-Perky/UMMarr/internal/version"
@@ -224,10 +225,10 @@ func (h *handler) RestoreBackup(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("HX-Redirect", "/system/backups?notice="+urlQuery("Restore staged - UMMarr is restarting to apply it. Reload in a few seconds."))
 	w.WriteHeader(http.StatusOK)
 	if h.deps.Restart != nil {
-		go func() {
+		safego.Go("restart", func() {
 			time.Sleep(time.Second)
 			h.deps.Restart()
-		}()
+		})
 	}
 }
 

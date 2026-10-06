@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
 )
@@ -354,14 +355,14 @@ func (h *handler) MusicEditorSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	search := h.deps.Search
-	go func() {
+	safego.Go("mass editor artist search", func() {
 		ctx := context.Background()
 		for _, id := range ids {
 			if _, err := search.SearchArtist(ctx, id); err != nil {
 				log.Printf("mass editor search artist %d: %v", id, err)
 			}
 		}
-	}()
+	})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<p class="notice">Searching %d artist(s) in the background - grabs show up in Activity.</p>`, len(ids))
 }

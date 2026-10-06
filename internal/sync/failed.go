@@ -13,6 +13,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/downloadclient"
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -114,11 +115,11 @@ func (s *DownloadService) redownload(g store.Grab) {
 	if s.Redownload == nil {
 		return
 	}
-	go func() {
+	safego.Go("redownload", func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
 		s.Redownload(ctx, g)
-	}()
+	})
 }
 
 // downloadFailed runs when a client reports a download failed: blocklist it,

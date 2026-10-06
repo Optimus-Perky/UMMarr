@@ -15,6 +15,7 @@ import (
 
 	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -79,11 +80,11 @@ func (a *MediaAnalyzer) Kick() {
 		return
 	}
 	a.mu.Unlock()
-	go func() {
+	safego.Go("analyze media files", func() {
 		if err := a.Run(context.Background()); err != nil && !errors.Is(err, ErrFFprobeMissing) {
 			log.Printf("analyze media files: %v", err)
 		}
-	}()
+	})
 }
 
 // OnEvent analyzes new files as soon as they're imported.
@@ -203,7 +204,7 @@ func (a *MediaAnalyzer) pass(ctx context.Context) error {
 			go func() {
 				defer wg.Done()
 				for f := range jobs {
-					a.analyze(ctx, f, plexFiles, cache)
+					_ = safego.Run("analyze a media file", func() { a.analyze(ctx, f, plexFiles, cache) })
 				}
 			}()
 		}

@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -60,7 +61,7 @@ func (s *Service) OnEvent(ctx context.Context, e store.Event) {
 		if s.Sync {
 			send(n)
 		} else {
-			go send(n)
+			safego.Go("notification "+n.Name, func() { send(n) })
 		}
 	}
 }

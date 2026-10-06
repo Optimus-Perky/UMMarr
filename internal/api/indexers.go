@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
 )
@@ -412,10 +413,13 @@ func (h *handler) TestAllIndexers(w http.ResponseWriter, r *http.Request) {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			results[i] = indexerTestResult{Name: ix.Name, OK: true}
-			if err := h.indexerService().Test(ctx, ix); err != nil {
-				results[i] = indexerTestResult{Name: ix.Name, Message: err.Error()}
-			}
+			results[i] = indexerTestResult{Name: ix.Name, Message: "the test crashed"}
+			_ = safego.Run("test indexer "+ix.Name, func() {
+				results[i] = indexerTestResult{Name: ix.Name, OK: true}
+				if err := h.indexerService().Test(ctx, ix); err != nil {
+					results[i] = indexerTestResult{Name: ix.Name, Message: err.Error()}
+				}
+			})
 		}()
 	}
 	wg.Wait()

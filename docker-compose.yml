@@ -4,6 +4,10 @@ services:
     image: ummarr:latest
     container_name: ummarr
     restart: unless-stopped
+    # On "docker stop" UMMarr finishes requests and any import mid-copy
+    # for up to 30 seconds before exiting; Docker's default 10 would kill
+    # it first.
+    stop_grace_period: 35s
     ports:
       - "8080:8080"
     environment:

@@ -56,3 +56,23 @@ func waitFor(t *testing.T, cond func() bool) {
 		time.Sleep(5 * time.Millisecond)
 	}
 }
+
+// A task that panics is a failed run, not a crashed server: the error is
+// recorded and the task can run again.
+func TestScheduler_PanickingTaskIsRecordedAsFailed(t *testing.T) {
+	s := New()
+	s.Register(&Task{Name: "Buggy", Run: func(context.Context) error { panic("nil map write") }})
+	for want := 1; want <= 2; want++ {
+		if err := s.RunNow(context.Background(), "Buggy"); err != nil {
+			t.Fatal(err)
+		}
+		waitFor(t, func() bool {
+			for _, st := range s.Statuses() {
+				if st.Name == "Buggy" && st.Runs == want && !st.Running {
+					return st.LastError == "task Buggy panicked: nil map write"
+				}
+			}
+			return false
+		})
+	}
+}

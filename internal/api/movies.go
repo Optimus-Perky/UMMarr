@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/decision"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -147,7 +148,7 @@ func (h *handler) MovieAdd(w http.ResponseWriter, r *http.Request) {
 	}
 	h.recordItemEvent(r, store.EventAdded, "movie", movieID, 0, 0, "Added from search", "interactive")
 	if h.deps.Metadata != nil {
-		go h.deps.Metadata.WriteMovie(context.Background(), movieID)
+		safego.Go("write movie metadata", func() { h.deps.Metadata.WriteMovie(context.Background(), movieID) })
 	}
 
 	w.Header().Set("HX-Redirect", "/movies")

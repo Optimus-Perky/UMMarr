@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
 )
@@ -250,7 +251,7 @@ func (h *handler) LibraryEditorSearch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	search := h.deps.Search
-	go func() {
+	safego.Go("mass editor search", func() {
 		ctx := context.Background()
 		for _, id := range ids {
 			var err error
@@ -263,7 +264,7 @@ func (h *handler) LibraryEditorSearch(w http.ResponseWriter, r *http.Request) {
 				log.Printf("mass editor search %s %d: %v", kind, id, err)
 			}
 		}
-	}()
+	})
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	fmt.Fprintf(w, `<p class="indexer-test ok">Searching %d %s in the background. Grabs show under Activity and History.</p>`, len(ids), noun.plural(len(ids)))
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/musicbrainz"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/tmdb"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/titleutil"
 )
@@ -76,7 +77,7 @@ func (s *ImportService) StartLibraryImport(rootFolderID int64, path, kind string
 		change(progress)
 		s.mu.Unlock()
 	}
-	go func() {
+	safego.Go("library import", func() {
 		s.runMu.Lock()
 		defer s.runMu.Unlock()
 		err := s.importLibrary(context.Background(), rootFolderID, update)
@@ -89,7 +90,7 @@ func (s *ImportService) StartLibraryImport(rootFolderID int64, path, kind string
 		if err != nil {
 			log.Printf("library import of root folder %d: %v", rootFolderID, err)
 		}
-	}()
+	})
 	return true
 }
 

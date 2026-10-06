@@ -403,7 +403,7 @@ func (s *Service) add(ctx context.Context, l store.ImportList, it Item) error {
 		}
 		e = store.Event{Event: store.EventAdded, MediaType: "movie", MovieID: sql.NullInt64{Int64: id, Valid: true}}
 		if l.SearchOnAdd && l.Monitored && s.Search != nil {
-			go s.Search.SearchMovie(context.WithoutCancel(ctx), id)
+			s.Search.InBackground("import list search", func(ctx context.Context) { s.Search.SearchMovie(ctx, id) })
 		}
 	case "series":
 		if s.Series == nil {
@@ -418,7 +418,7 @@ func (s *Service) add(ctx context.Context, l store.ImportList, it Item) error {
 		}
 		e = store.Event{Event: store.EventAdded, MediaType: "series", SeriesID: sql.NullInt64{Int64: id, Valid: true}}
 		if l.SearchOnAdd && l.Monitored && s.Search != nil {
-			go s.Search.SearchSeries(context.WithoutCancel(ctx), id, nil)
+			s.Search.InBackground("import list search", func(ctx context.Context) { s.Search.SearchSeries(ctx, id, nil) })
 		}
 	default:
 		return fmt.Errorf("unknown media type %q", l.MediaType)

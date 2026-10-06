@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -229,10 +230,14 @@ func (s *IndexerService) run(ctx context.Context, purpose, mediaType string, sea
 			defer wg.Done()
 			ictx, cancel := context.WithTimeout(ctx, indexerTimeout)
 			defer cancel()
-			c := s.Client(ix)
-			caps, capsOK := s.indexerCaps(ictx, ix, c)
-			releases, err := search(ictx, c, caps, capsOK, categoriesFor(ix, mediaType))
-			outcomes[i] = outcome{releases, err}
+			if err := safego.Run("search "+ix.Name, func() {
+				c := s.Client(ix)
+				caps, capsOK := s.indexerCaps(ictx, ix, c)
+				releases, err := search(ictx, c, caps, capsOK, categoriesFor(ix, mediaType))
+				outcomes[i] = outcome{releases, err}
+			}); err != nil {
+				outcomes[i] = outcome{nil, err}
+			}
 		}()
 	}
 	wg.Wait()

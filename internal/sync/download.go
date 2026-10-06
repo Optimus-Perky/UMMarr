@@ -19,6 +19,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -416,7 +417,7 @@ func (s *DownloadService) checkOneGrab(ctx context.Context, g store.Grab, st dow
 // directly testable with a synthetic slow work func.
 func checkWithTimeout(g store.Grab, timeout time.Duration, work func() store.Grab) (store.Grab, bool) {
 	done := make(chan store.Grab, 1)
-	go func() { done <- work() }()
+	safego.Go("check a grab", func() { done <- work() })
 	select {
 	case updated := <-done:
 		return updated, true

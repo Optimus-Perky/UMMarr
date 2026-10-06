@@ -13,6 +13,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/decision"
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
+	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -29,6 +30,27 @@ type SearchService struct {
 	mu      gosync.Mutex
 	rssBusy bool
 	missing map[string]*MissingSearch
+
+	slotsOnce gosync.Once
+	slots     chan struct{}
+}
+
+// backgroundSearchSlots bounds how many searches InBackground runs at once.
+// An import list adding 300 titles, or an API client sending 1,000 movie
+// ids, would otherwise hit every indexer with all of them at the same
+// moment - and be rate-limited or banned for it.
+const backgroundSearchSlots = 3
+
+// InBackground runs search in its own goroutine once one of the
+// backgroundSearchSlots is free, and returns straight away. The search
+// gets a context of its own: it outlives the request that asked for it.
+func (s *SearchService) InBackground(name string, search func(ctx context.Context)) {
+	s.slotsOnce.Do(func() { s.slots = make(chan struct{}, backgroundSearchSlots) })
+	safego.Go(name, func() {
+		s.slots <- struct{}{}
+		defer func() { <-s.slots }()
+		search(context.Background())
+	})
 }
 
 func (s *SearchService) now() time.Time {
@@ -332,7 +354,7 @@ func (s *SearchService) StartMissingSearch(mediaType, mode string) bool {
 		change(progress)
 		s.mu.Unlock()
 	}
-	go func() {
+	safego.Go("search all missing", func() {
 		ctx := context.Background()
 		err := s.searchAllMissing(ctx, mediaType, mode, update)
 		update(func(m *MissingSearch) {
@@ -344,7 +366,7 @@ func (s *SearchService) StartMissingSearch(mediaType, mode string) bool {
 		if err != nil {
 			log.Printf("search all missing %s: %v", mediaType, err)
 		}
-	}()
+	})
 	return true
 }
 
