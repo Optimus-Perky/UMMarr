@@ -610,6 +610,15 @@ func main() {
 	})
 
 	root.AddCommand(&cobra.Command{
+		Use:   "version",
+		Short: "Print which build this is",
+		Args:  cobra.NoArgs,
+		Run: func(cmd *cobra.Command, args []string) {
+			fmt.Printf("UMMarr %s %s\n", version.Commit, version.Built)
+		},
+	})
+
+	root.AddCommand(&cobra.Command{
 		Use:   "healthcheck",
 		Short: "Check whether the local UMMarr server is responding (used as the Docker HEALTHCHECK)",
 		RunE: func(cmd *cobra.Command, args []string) error {

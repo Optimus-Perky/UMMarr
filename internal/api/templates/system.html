@@ -17,6 +17,10 @@
     <dt>Media analysis</dt><dd>{{.MediaAnalysis}}</dd>
   </dl>
 </div>
+<div class="panel">
+  <div class="panel-head"><h2>Metadata sources</h2></div>
+  <p class="notice">This product uses the TMDB API but is not endorsed or certified by TMDB. Metadata also comes from TVMaze, MusicBrainz, OMDb, TheTVDB and Discogs.</p>
+</div>
 {{else if eq .Tab "health"}}
 <div class="panel">
   <div class="panel-head"><h2>Health</h2><span class="notice">Checked {{.CheckedAt}}</span></div>

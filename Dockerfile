@@ -14,6 +14,16 @@ RUN go mod download
 
 COPY . .
 
+# VERSION (a short git revision) and BUILD_DATE stamp the binary, so
+# System -> Status and the update check know which build this is:
+#   docker build --build-arg VERSION=$(git rev-parse --short HEAD) \
+#     --build-arg BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ) .
+# .git isn't in the build context, so this can't be worked out in here.
+# Left unset, a version.txt written before the build is kept as it is.
+ARG VERSION=""
+ARG BUILD_DATE=""
+RUN if [ -n "$VERSION" ]; then echo "$VERSION $BUILD_DATE" > internal/version/version.txt; fi
+
 # CGO_ENABLED=0 for a fully static binary - modernc.org/sqlite is pure Go
 # (no cgo sqlite driver needed), so this carries no functionality cost and
 # removes any dynamic-linking attack surface. -trimpath/-ldflags="-s -w"

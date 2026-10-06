@@ -11,7 +11,8 @@ This covers the **database schema**, the **metadata-provider layer**
 (fetch + merge), the **sync service** (persisting merged metadata into the
 database), the **folder-path builder** (turning naming templates into
 actual on-disk paths), the **web UI** (server-rendered Go + htmx),
-**indexer search + grabbing** (Torznab/Newznab indexers, Prowlarr sync + Deluge), **importers** (copying
+**indexer search + grabbing** (Torznab/Newznab indexers and Prowlarr sync;
+Deluge, qBittorrent, Transmission, SABnzbd and NZBGet), **importers** (copying
 a finished download into the library), and **auth** (a login page + a
 webhook token) - the full add→search→grab→import loop, deployable via
 Docker (see Deployment, below).
@@ -33,10 +34,10 @@ scenarios (`internal/store/fixtures/fixtures_test.go`):
 
 **Metadata providers** (`internal/metadata/`) fetch from TMDB, TVMaze,
 MusicBrainz, and OMDb, and merge results from more than one source into a
-single record with per-field provenance. TVDB, Discogs, and TheAudioDB are
-deliberately deferred — see the package doc comments in
-`internal/metadata/providers/{tmdb,tvmaze,musicbrainz,omdb}` for why, and
-`internal/metadata/merge/` for the merge engine. Verified via:
+single record with per-field provenance. TVDB and Discogs (cover art and
+pressing details for music) were added later; TheAudioDB is not used. See
+the package doc comments in `internal/metadata/providers/*` for each
+provider, and `internal/metadata/merge/` for the merge engine. Verified via:
 
 1. Fixture TMDB+OMDb responses merging into one record, both external IDs
    (plus `imdb`, cross-referenced from TMDB) written and idempotently
@@ -157,28 +158,40 @@ existing `GetExternalID`, not a fragile name match. Verified via:
 ## Project layout
 
 ```
-cmd/ummarr/              main entrypoint, cobra CLI (migrate; serve/import land later)
+cmd/ummarr/              main entrypoint, cobra CLI: serve, migrate, version, healthcheck,
+                         and one-off tasks (episode-names, rename-preview, fetch-covers, ...)
 internal/config/         env-var config (API keys) - not for the assistant to fill in, see below
-internal/domain/         pure entities (no DB tags) — not yet populated
 internal/store/
   migrations/            goose SQL migrations, embedded into the binary
-  queries/               sqlc query files — not yet populated
   fixtures/              golden-path round-trip tests
-  metadata_upserts.go    upsert helpers for external_ids / metadata_field_provenance
+  *.go                   hand-written queries, one file per area
 internal/metadata/       provider result types (Field[T], MovieMetadata, ...)
   providers/
-    httpclient/          shared rate-limited HTTP helper
-    tmdb/ tvmaze/ musicbrainz/ omdb/   built
-    tvdb/ discogs/ theaudiodb/ imdb/   deferred/not applicable, stay empty
+    httpclient/          shared rate-limited HTTP helper (timeouts, retries)
+    tmdb/ tvmaze/ musicbrainz/ omdb/ tvdb/ discogs/
   merge/                 the merge engine + one adapt_<provider>.go per provider
-internal/sync/           orchestrates fetch -> merge -> persist per media type
+internal/sync/           the services: add/refresh, search, grab, import, organize
+internal/decision/       which release to take: quality, formats, blocklist, upgrades
+internal/releaseparse/   release-title parsing (quality, episodes, languages)
+internal/customformat/   custom format conditions and their JSON import/export
+internal/indexer/        Torznab/Newznab client, Prowlarr API
+internal/downloadclient/ Deluge, qBittorrent, Transmission, SABnzbd, NZBGet
+internal/importer/       moving files into the library: copy/hardlink, permissions,
+                         recycling bin, library scan
+internal/importlist/     TMDB, Trakt and Plex watchlist import lists
+internal/notify/         Discord, Telegram, Pushover, email, webhook, Plex
+internal/nfo/            Kodi/Emby, Jellyfin and Plex metadata files
+internal/mediainfo/      FFprobe and Plex media analysis, audio tags
+internal/tasks/          the scheduler behind System -> Tasks
+internal/safego/         background goroutines that log a panic instead of crashing
+internal/backup/         database backups and restore
+internal/health/         System -> Status health checks
 internal/titleutil/      clean/sort title computation (NOT NULL schema columns)
 internal/pathbuilder/    pure template resolution + sanitization
   (path.go in internal/store holds the DB-aware Resolve*Path functions
   that call into pathbuilder - see Design highlights)
-internal/importer/       arr-database importers — not yet populated
-  sonarr/, radarr/, lidarr/
-internal/api/            web UI + HTTP handlers (server-rendered Go + htmx)
+internal/api/            web UI + HTTP handlers (server-rendered Go + htmx),
+                         plus a partial Radarr/Sonarr-compatible /api/v3
   templates/             html/template pages + htmx partials, embedded
   static/                vendored htmx.min.js + style.css, embedded
 ```
@@ -227,6 +240,7 @@ go run ./cmd/ummarr migrate --db ummarr.db   # apply pending migrations only
 go run ./cmd/ummarr serve --db ummarr.db     # run the web UI (default :8080)
 go run ./cmd/ummarr episode-names --db ummarr.db "MobLand"   # one task, no UI
 go run ./cmd/ummarr rename-preview --db ummarr.db            # what Organize would change
+go run ./cmd/ummarr version                                  # which build this is
 ```
 
 `migrate` applies any pending migrations to the given SQLite file (created
@@ -237,6 +251,11 @@ against a live database, and against a running container:
 `docker exec ummarr /ummarr episode-names --db /config/ummarr.db "MobLand"`.
 `serve` applies migrations too, then starts the web server -
 set `UMMARR_LISTEN_ADDR` to change the bind address (default `:8080`).
+Before migrating an existing database to a newer schema, `serve` and
+`migrate` copy it to `backups/` beside it (shown under System → Backups,
+restorable like any other backup). On SIGTERM or Ctrl-C the server stops
+taking requests and gives requests and background work - an import
+mid-copy, say - up to 30 seconds to finish before exiting.
 Postgres support is planned via `jackc/pgx/v5` but not yet wired up —
 SQLite (via `modernc.org/sqlite`, pure Go, no cgo) is the only driver
 right now, keeping the single-static-binary build simple.
@@ -257,7 +276,18 @@ tests above. The actual key file isn't part of this repo.)
 
 TVMaze and MusicBrainz need no key. TMDB attribution ("This product uses
 the TMDB API but is not endorsed or certified by TMDB") is contractually
-required and must appear in the web UI once it exists.
+required; it is shown under System → Status.
+
+## Development
+
+```
+go test ./...          # unit tests, no network or keys needed
+go vet ./... && gofmt -l .
+```
+
+GitHub Actions (`.github/workflows/ci.yml`) runs gofmt, vet, the test
+suite under the race detector, `govulncheck`, and a Docker build on every
+push and pull request.
 
 ## Deployment (Docker)
 
@@ -279,6 +309,11 @@ identical host directory mounted at that identical path, it can't find
 the file to copy at all. Once running, point UMMarr's own Settings → Root
 Folders at subpaths under that same mount - `/data/Movies`, `/data/TV`,
 `/data/Music`.
+
+Pass `--build-arg VERSION=$(git rev-parse --short HEAD) --build-arg
+BUILD_DATE=$(date -u +%Y-%m-%dT%H:%M:%SZ)` to `docker build` (or let CI do
+it) so the image knows which build it is; otherwise it reports `dev` and
+the update check can't compare it with GitHub.
 
 **Image**: multi-stage build - `golang:1.26-alpine` compiles a fully
 static binary (`CGO_ENABLED=0`; `modernc.org/sqlite` is pure Go, no cgo
@@ -305,6 +340,17 @@ no server-side session store; set `UMMARR_SESSION_KEY` too (`openssl rand
 -base64 32`) so sessions survive a container restart - if left unset, a
 random key is generated at startup and every session is invalidated on
 the next restart/redeploy.
+
+Whether or not a login is set, every page is protected from other web
+sites: a form another site submits through your browser is refused
+(Go's `http.CrossOriginProtection`, checking `Sec-Fetch-Site`/`Origin`),
+so a page you visit can't, say, delete your library while UMMarr runs on
+`localhost`. API clients, Prowlarr and download-client scripts send
+neither header and are unaffected. Pages can only be framed by the same
+origin (an Organizr on another subdomain can't embed them). Repeated wrong
+passwords lock that address out, starting at a minute and doubling up to
+15. Behind a reverse proxy that terminates TLS, forward
+`X-Forwarded-Proto: https` so the session cookie is marked Secure.
 
 ### Deluge "on complete" webhook
 
