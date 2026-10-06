@@ -92,8 +92,8 @@ func TestSettings_MediaManagementShowsEverySection(t *testing.T) {
 			t.Errorf("want a %s field", name)
 		}
 	}
-	if n := strings.Count(body, "Not active yet:"); n != 5 {
-		t.Errorf("want the five behaviour-later settings marked not active yet (Analyze Video Files works now), found %d", n)
+	if n := strings.Count(body, "Not active yet:"); n != 3 {
+		t.Errorf("want the three behaviour-later settings marked not active yet (Analyze Video Files and the recycling bin work now), found %d", n)
 	}
 	if !strings.Contains(body, `id="toggle-advanced"`) || !strings.Contains(body, `class="setting-row advanced"`) {
 		t.Errorf("want advanced rows and a toggle for them")

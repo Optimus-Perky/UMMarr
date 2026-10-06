@@ -779,8 +779,7 @@
       <div class="setting-label">Recycling Bin</div>
       <div class="setting-control">
         <input type="text" name="recycle_bin_path" value="{{$media.RecycleBinPath}}" placeholder="/data/.recycle">
-        <span class="setting-help">Deleted media files would go here instead of being removed.</span>
-        <span class="setting-inactive">Not active yet: UMMarr doesn't delete media files yet.</span>
+        <span class="setting-help">Replaced and deleted media files - and the folders of deleted movies and series - go here instead of being removed. Leave empty to delete them outright.</span>
         {{with index $errors "recycle_bin_path"}}<span class="setting-error">{{.}}</span>{{end}}
       </div>
     </div>
@@ -789,7 +788,6 @@
       <div class="setting-control">
         <input type="number" min="0" name="recycle_bin_cleanup_days" value="{{$media.RecycleBinCleanupDays}}">
         <span class="setting-help">Days to keep files in the recycling bin. 0 turns cleanup off.</span>
-        <span class="setting-inactive">Not active yet: UMMarr doesn't delete media files yet.</span>
         {{with index $errors "recycle_bin_cleanup_days"}}<span class="setting-error">{{.}}</span>{{end}}
       </div>
     </div>

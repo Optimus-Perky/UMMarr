@@ -163,13 +163,24 @@ func (s *ImportService) DeleteSeries(ctx context.Context, seriesID int64, delete
 	for _, root := range roots {
 		rootPath := filepath.Clean(root.Path)
 		if folder != rootPath && strings.HasPrefix(folder, rootPath+string(filepath.Separator)) {
-			if err := os.RemoveAll(folder); err != nil {
+			if err := s.discardFolder(ctx, folder); err != nil {
 				return fmt.Errorf("remove %s: %w", folder, err)
 			}
 			return nil
 		}
 	}
 	return ErrUnsafeDelete
+}
+
+// discardFolder takes a deleted item's folder out of the library: into the
+// recycling bin when Settings -> Media Management names one, so a delete
+// clicked by mistake can be undone, and off the disk otherwise.
+func (s *ImportService) discardFolder(ctx context.Context, folder string) error {
+	ms, err := store.GetMediaSettings(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	return importer.RecycleOrRemoveAll(folder, ms.RecycleBinPath)
 }
 
 // removeInsideLibrary removes folder from disk when it sits inside one of
@@ -183,7 +194,7 @@ func (s *ImportService) removeInsideLibrary(ctx context.Context, mediaType, fold
 	for _, root := range roots {
 		rootPath := filepath.Clean(root.Path)
 		if folder != rootPath && strings.HasPrefix(folder, rootPath+string(filepath.Separator)) {
-			if err := os.RemoveAll(folder); err != nil {
+			if err := s.discardFolder(ctx, folder); err != nil {
 				return fmt.Errorf("remove %s: %w", folder, err)
 			}
 			return nil

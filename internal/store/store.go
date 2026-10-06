@@ -8,6 +8,10 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"log"
+	"os"
+	"path/filepath"
+	"time"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
@@ -40,8 +44,15 @@ const maxOpenConns = 8
 //   - foreign_keys(1): off by default per connection, so it cannot be left
 //     to the schema.
 //   - busy_timeout(60000): wait rather than fail when a write does collide.
+//   - _txlock=immediate: a transaction takes the write lock when it begins.
+//     SQLite's default (DEFERRED) takes it at the first write, and a
+//     transaction that has already read and then finds another writer in
+//     the way fails at once with SQLITE_BUSY - busy_timeout can't help,
+//     because waiting would break the snapshot it has read from. Every
+//     WithTx in UMMarr reads then writes, so each waits its turn instead.
 const pragmas = "_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)" +
-	"&_pragma=cache_size(-64000)&_pragma=foreign_keys(1)&_pragma=busy_timeout(60000)"
+	"&_pragma=cache_size(-64000)&_pragma=foreign_keys(1)&_pragma=busy_timeout(60000)" +
+	"&_txlock=immediate"
 
 // Open opens (creating if necessary) a SQLite database at path and applies
 // any pending migrations.
@@ -58,9 +69,45 @@ func Open(path string) (*sql.DB, error) {
 	if err := goose.SetDialect("sqlite3"); err != nil {
 		return nil, fmt.Errorf("set goose dialect: %w", err)
 	}
+	if err := backupBeforeMigrating(db, path); err != nil {
+		return nil, err
+	}
 	if err := goose.Up(db, "migrations"); err != nil {
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
 	return db, nil
+}
+
+// backupBeforeMigrating copies an existing database aside when this build
+// is about to migrate it, so a migration that goes wrong - or a downgrade
+// after one that went right - has the pre-upgrade data to go back to. The
+// copy lands with the other backups (System -> Backups), where it can be
+// restored like any of them. A new, empty database has nothing to keep.
+func backupBeforeMigrating(db *sql.DB, path string) error {
+	current, err := goose.GetDBVersion(db)
+	if err != nil {
+		return fmt.Errorf("read schema version: %w", err)
+	}
+	migrations, err := goose.CollectMigrations("migrations", 0, goose.MaxVersion)
+	if err != nil {
+		return fmt.Errorf("list migrations: %w", err)
+	}
+	last, err := migrations.Last()
+	if err != nil {
+		return fmt.Errorf("list migrations: %w", err)
+	}
+	if current == 0 || current >= last.Version {
+		return nil
+	}
+	dir := filepath.Join(filepath.Dir(path), "backups")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("create backups folder: %w", err)
+	}
+	dest := filepath.Join(dir, fmt.Sprintf("ummarr-backup-premigration-v%d-%s.db", current, time.Now().Format("2006-01-02-150405")))
+	if _, err := db.Exec(`VACUUM INTO ?`, dest); err != nil {
+		return fmt.Errorf("back up the database before migrating it: %w", err)
+	}
+	log.Printf("backed up the database to %s before migrating it from version %d to %d", dest, current, last.Version)
+	return nil
 }

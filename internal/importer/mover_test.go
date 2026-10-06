@@ -1,9 +1,11 @@
 package importer_test
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
 )
@@ -43,7 +45,9 @@ func TestCopyFile_FailureLeavesNoPartialDestAndKeepsSource(t *testing.T) {
 		t.Fatalf("write src: %v", err)
 	}
 
-	if _, err := os.Stat("/dev/full"); err != nil {
+	// A character device, not just a path: in some sandboxes /dev/full is
+	// an ordinary file, which accepts writes and proves nothing.
+	if info, err := os.Stat("/dev/full"); err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		t.Skip("/dev/full not available in this environment")
 	}
 
@@ -233,5 +237,74 @@ func TestCopyFile_NewFolderKeepsSetgid(t *testing.T) {
 	}
 	if got, want := permOf(t, filepath.Join(lib, "Show")), os.ModeSetgid|0o775; got != want {
 		t.Errorf("new folder: want %v, got %v", want, got)
+	}
+}
+
+// os.Rename replaces an existing file silently; RenameFileIfDifferent must
+// refuse instead, and leave both files exactly as they were.
+func TestRenameFileIfDifferent_NeverReplacesAnotherFile(t *testing.T) {
+	dir := t.TempDir()
+	src, dest := filepath.Join(dir, "a.flac"), filepath.Join(dir, "b.flac")
+	if err := os.WriteFile(src, []byte("vinyl rip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dest, []byte("cd rip"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	err := importer.RenameFileIfDifferent(src, dest, importer.Permissions{})
+	if !errors.Is(err, importer.ErrDestinationExists) {
+		t.Fatalf("want ErrDestinationExists, got %v", err)
+	}
+	if got, _ := os.ReadFile(dest); string(got) != "cd rip" {
+		t.Fatalf("dest was changed: %q", got)
+	}
+	if got, _ := os.ReadFile(src); string(got) != "vinyl rip" {
+		t.Fatalf("src was changed: %q", got)
+	}
+}
+
+// A deleted folder lands in the recycling bin stamped with the time it was
+// recycled, so the cleanup keeps it for the configured days rather than
+// judging it by when its files were last written.
+func TestRecycleOrRemoveAll_MovesTheFolderAndCleanupWaits(t *testing.T) {
+	dir := t.TempDir()
+	folder, bin := filepath.Join(dir, "Movies", "Heat (1995)"), filepath.Join(dir, ".recycle")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	file := filepath.Join(folder, "Heat.mkv")
+	if err := os.WriteFile(file, []byte("movie"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Now().Add(-365 * 24 * time.Hour)
+	_ = os.Chtimes(folder, old, old)
+
+	if err := importer.RecycleOrRemoveAll(folder, bin); err != nil {
+		t.Fatalf("recycle: %v", err)
+	}
+	if _, err := os.Stat(folder); !os.IsNotExist(err) {
+		t.Fatalf("want the folder gone from the library, got %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(bin, "Heat (1995)", "Heat.mkv")); err != nil {
+		t.Fatalf("want the file in the bin: %v", err)
+	}
+	if removed, err := importer.CleanRecycleBin(bin, 7*24*time.Hour); err != nil || removed != 0 {
+		t.Fatalf("a folder recycled just now must survive a 7-day cleanup, removed %d, %v", removed, err)
+	}
+	if removed, err := importer.CleanRecycleBin(bin, -time.Second); err != nil || removed != 1 {
+		t.Fatalf("want it removed once it's old enough, removed %d, %v", removed, err)
+	}
+}
+
+func TestRecycleOrRemoveAll_WithoutABinDeletes(t *testing.T) {
+	folder := filepath.Join(t.TempDir(), "Gone")
+	if err := os.MkdirAll(folder, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := importer.RecycleOrRemoveAll(folder, ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(folder); !os.IsNotExist(err) {
+		t.Fatalf("want the folder deleted, got %v", err)
 	}
 }

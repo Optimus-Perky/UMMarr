@@ -53,10 +53,14 @@ type MediaSettings struct {
 	AnalyzeVideoFiles bool
 
 	// Stored and shown, not acted on yet.
-	PropersRepacks        string
-	ImportUsingScript     bool
-	ImportScriptPath      string
-	RescanAfterRefresh    string
+	PropersRepacks     string
+	ImportUsingScript  bool
+	ImportScriptPath   string
+	RescanAfterRefresh string
+
+	// RecycleBinPath receives replaced and deleted files instead of their
+	// being removed; the "Clean up recycling bin" task empties what has
+	// been there longer than RecycleBinCleanupDays (0: never).
 	RecycleBinPath        string
 	RecycleBinCleanupDays int64
 

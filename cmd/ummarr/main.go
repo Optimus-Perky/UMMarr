@@ -528,6 +528,19 @@ func main() {
 					}
 					return err
 				}})
+			scheduler.Register(&tasks.Task{Name: "Clean up recycling bin", Interval: 24 * time.Hour,
+				Description: "Permanently deletes files that have been in the recycling bin longer than Settings → Media Management's Recycling Bin Cleanup allows.",
+				Run: func(ctx context.Context) error {
+					ms, err := store.GetMediaSettings(ctx, db)
+					if err != nil || ms.RecycleBinPath == "" || ms.RecycleBinCleanupDays <= 0 {
+						return err
+					}
+					removed, err := importer.CleanRecycleBin(ms.RecycleBinPath, time.Duration(ms.RecycleBinCleanupDays)*24*time.Hour)
+					if removed > 0 {
+						log.Printf("clean up recycling bin: removed %d item(s) older than %d day(s)", removed, ms.RecycleBinCleanupDays)
+					}
+					return err
+				}})
 			scheduler.Register(&tasks.Task{Name: "Analyze media files", Description: "Reads codecs, resolution, HDR, audio tracks and subtitles from files not analyzed yet, with FFprobe or from Plex (Settings → Media Management).", Interval: time.Hour, Run: mediaAnalyzer.Run})
 			scheduler.Register(&tasks.Task{Name: "Write metadata", Description: "Writes .nfo files and images for the whole library for the providers ticked under Settings → Metadata (Kodi / Emby, Jellyfin, Plex).", Run: metadataWriter.WriteAll})
 			scheduler.Register(&tasks.Task{Name: "Library scan", Description: "Scans every library folder for files already on disk and imports folders UMMarr doesn't track yet.",

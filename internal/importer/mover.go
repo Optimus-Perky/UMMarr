@@ -1,6 +1,7 @@
 package importer
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -158,6 +159,15 @@ func CopyFile(src, dest string, p Permissions) error {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("copy %s to %s: %w", src, dest, err)
 	}
+	// Flush the data to disk before the rename makes it the library's copy.
+	// Without this a power cut shortly after an import can leave dest
+	// renamed into place but empty, while the download it came from has
+	// since been removed.
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		_ = os.Remove(tmpPath)
+		return fmt.Errorf("flush %s to disk: %w", dest, err)
+	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("close temp file for %s: %w", dest, err)
@@ -177,8 +187,25 @@ func CopyFile(src, dest string, p Permissions) error {
 		_ = os.Remove(tmpPath)
 		return fmt.Errorf("move copy into place at %s: %w", dest, err)
 	}
+	syncDir(dir)
 	return nil
 }
+
+// syncDir flushes a folder's entries, so a rename into it survives a power
+// cut. Best effort: some filesystems (and FUSE mounts) refuse to fsync a
+// directory, and that's no reason to fail an import that has worked.
+func syncDir(dir string) {
+	d, err := os.Open(dir)
+	if err != nil {
+		return
+	}
+	_ = d.Sync()
+	d.Close()
+}
+
+// ErrDestinationExists is returned by RenameFileIfDifferent when another
+// file already has the name src would be renamed to.
+var ErrDestinationExists = errors.New("a different file already has that name")
 
 // CopyFileIfDifferent copies src to dest unless they're the same path, in
 // which case it's a no-op.
@@ -203,9 +230,20 @@ func CopyFileIfDifferent(src, dest string, p Permissions) error {
 // Falls back to a copy if the rename fails for any reason (a cross-device
 // layout, say, which Unraid's fuse mount can present): leaving both files
 // behind is wasteful but safe, whereas failing the import is not.
+//
+// It never replaces a different file: os.Rename would, silently, so a dest
+// that already exists is refused with ErrDestinationExists. The one
+// exception is dest being src itself under another spelling - a
+// case-only rename on a case-insensitive filesystem.
 func RenameFileIfDifferent(src, dest string, p Permissions) error {
 	if samePath(src, dest) {
 		return nil // already exactly where it belongs, under the right name
+	}
+	if destInfo, err := os.Lstat(dest); err == nil {
+		srcInfo, srcErr := os.Lstat(src)
+		if srcErr != nil || !os.SameFile(srcInfo, destInfo) {
+			return fmt.Errorf("rename %s to %s: %w", src, dest, ErrDestinationExists)
+		}
 	}
 	if err := EnsureDir(filepath.Dir(dest), p); err != nil {
 		return fmt.Errorf("create dest dir for %s: %w", dest, err)
@@ -363,13 +401,94 @@ func RecycleOrRemove(path, recycleBin string) error {
 		dest = filepath.Join(recycleBin, fmt.Sprintf("%s (%d)%s", strings.TrimSuffix(base, ext), i, ext))
 	}
 	if err := os.Rename(path, dest); err == nil {
+		markRecycled(dest)
 		return nil
 	}
 	// Another filesystem: copy, then remove the original.
 	if err := CopyFile(path, dest, Permissions{}); err != nil {
 		return err
 	}
+	markRecycled(dest)
 	return os.Remove(path)
+}
+
+// RecycleOrRemoveAll is RecycleOrRemove for a whole folder - a deleted
+// movie or series with its files.
+func RecycleOrRemoveAll(folder, recycleBin string) error {
+	if recycleBin == "" {
+		return os.RemoveAll(folder)
+	}
+	if _, err := os.Stat(folder); os.IsNotExist(err) {
+		return nil
+	}
+	if err := os.MkdirAll(recycleBin, 0o755); err != nil {
+		return err
+	}
+	base := filepath.Base(folder)
+	dest := filepath.Join(recycleBin, base)
+	for i := 1; ; i++ {
+		if _, err := os.Lstat(dest); os.IsNotExist(err) {
+			break
+		}
+		dest = filepath.Join(recycleBin, fmt.Sprintf("%s (%d)", base, i))
+	}
+	if err := os.Rename(folder, dest); err == nil {
+		markRecycled(dest)
+		return nil
+	}
+	// Another filesystem: copy every file across, then remove the original.
+	err := filepath.WalkDir(folder, func(path string, d os.DirEntry, err error) error {
+		if err != nil || d.IsDir() || !d.Type().IsRegular() {
+			return err
+		}
+		rel, err := filepath.Rel(folder, path)
+		if err != nil {
+			return err
+		}
+		return CopyFile(path, filepath.Join(dest, rel), Permissions{})
+	})
+	if err != nil {
+		return fmt.Errorf("recycle %s: %w", folder, err)
+	}
+	markRecycled(dest)
+	return os.RemoveAll(folder)
+}
+
+// markRecycled stamps a recycled file or folder with the time it was
+// recycled. The cleanup goes by modification time, and a rename keeps the
+// old one - without this, a file last written years ago would be deleted
+// from the bin on the next cleanup, minutes after landing there.
+func markRecycled(path string) {
+	now := time.Now()
+	_ = os.Chtimes(path, now, now)
+}
+
+// CleanRecycleBin permanently deletes what has sat in recycleBin longer
+// than olderThan, judged by the time it was recycled. It reports how many
+// entries it removed.
+func CleanRecycleBin(recycleBin string, olderThan time.Duration) (int, error) {
+	entries, err := os.ReadDir(recycleBin)
+	if os.IsNotExist(err) {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	cutoff := time.Now().Add(-olderThan)
+	removed := 0
+	var errs []error
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil || !info.ModTime().Before(cutoff) {
+			continue
+		}
+		if err := os.RemoveAll(filepath.Join(recycleBin, e.Name())); err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		removed++
+	}
+	return removed, errors.Join(errs...)
 }
 
 // stalePartialAge is how long a .partial file has to sit untouched before

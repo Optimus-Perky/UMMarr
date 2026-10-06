@@ -132,3 +132,50 @@ func openDBAt(t *testing.T, path string) *sql.DB {
 	}
 	return db
 }
+
+// Two transactions that each read and then write, at the same moment. With
+// SQLite's default DEFERRED transactions the second to write fails at once
+// with "database is locked" - busy_timeout can't save a transaction that
+// has already read. Taking the write lock up front makes them queue.
+func TestWithTx_ConcurrentReadThenWriteTransactionsQueue(t *testing.T) {
+	db := openTestDB(t)
+	ctx := context.Background()
+	if _, err := db.ExecContext(ctx, `CREATE TABLE counter (n INTEGER)`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.ExecContext(ctx, `INSERT INTO counter VALUES (0)`); err != nil {
+		t.Fatal(err)
+	}
+	const workers = 6
+	var wg sync.WaitGroup
+	errs := make(chan error, workers)
+	for range workers {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			errs <- store.WithTx(ctx, db, func(tx *sql.Tx) error {
+				var n int
+				if err := tx.QueryRowContext(ctx, `SELECT n FROM counter`).Scan(&n); err != nil {
+					return err
+				}
+				time.Sleep(5 * time.Millisecond) // widen the window
+				_, err := tx.ExecContext(ctx, `UPDATE counter SET n = ?`, n+1)
+				return err
+			})
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		if err != nil {
+			t.Fatalf("transaction failed: %v", err)
+		}
+	}
+	var n int
+	if err := db.QueryRowContext(ctx, `SELECT n FROM counter`).Scan(&n); err != nil {
+		t.Fatal(err)
+	}
+	if n != workers {
+		t.Fatalf("want every increment kept (%d), got %d - a lost update", workers, n)
+	}
+}
