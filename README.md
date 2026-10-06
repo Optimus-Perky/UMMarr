@@ -385,3 +385,8 @@ Omit `?token=...` entirely if `UMMARR_WEBHOOK_TOKEN` isn't set in your
 behavior) - otherwise it must match exactly, since this route is exempt
 from the cookie-based login (a shell script can't hold a browser
 session) and only this token gates it.
+
+## License
+
+MIT - see [LICENSE](LICENSE). UMMarr is an independent project: it takes
+its ideas from Sonarr, Radarr and Lidarr but contains none of their code.
