@@ -514,7 +514,7 @@
 {{if eq .Tab "metadata"}}
 <div class="panel" data-section="metadata-sources" id="metadata-sources">
   <div class="panel-head"><h2>Metadata Sources</h2></div>
-  <p class="notice">Where UMMarr gets titles, overviews, dates, episodes and artwork. For each field the first enabled provider with a value wins; the ones below fill in what it leaves empty. Details are fetched when something is added - an item's Metadata button refreshes that one, and System → Tasks → Refresh metadata does the whole library when you ask.</p>
+  <p class="notice">Where UMMarr gets titles, overviews, dates, episodes and artwork. For each field the first enabled provider with a value wins; the ones below fill in what it leaves empty. Details are fetched when something is added - an item's Metadata button refreshes that one, System → Tasks → Refresh metadata keeps the library current every 12 hours (anything still airing or recently released; the rest monthly), and Refresh all metadata does the whole library when you ask.</p>
   {{range .MetadataSources}}
   {{$media := .MediaType}}
   <section class="mm-section" style="margin-top:14px">

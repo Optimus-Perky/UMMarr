@@ -483,10 +483,17 @@ func main() {
 					log.Printf("find episode names: %s", report.Summary())
 					return err
 				}})
-			scheduler.Register(&tasks.Task{Name: "Refresh metadata", Description: "Re-fetches every movie and series from the metadata providers (new episodes, titles, posters and season posters). Manual: metadata is fetched when something is added, and a single item is refreshed from its own page.",
+			scheduler.Register(&tasks.Task{Name: "Refresh metadata", Interval: 12 * time.Hour,
+				Description: "Re-fetches the movies and series that are due from the metadata providers - new episodes, release dates, titles and posters. Anything still airing or recently released is due every 12 hours, the rest every 30 days.",
+				Run: func(ctx context.Context) error {
+					report, err := sync.RefreshDue(ctx, movieService, seriesService)
+					log.Printf("refresh metadata: %s", report.Summary())
+					return err
+				}})
+			scheduler.Register(&tasks.Task{Name: "Refresh all metadata", Description: "Re-fetches every movie and series from the metadata providers, whether due or not. Slow on a big library; run it after changing the metadata provider order.",
 				Run: func(ctx context.Context) error {
 					report, err := sync.RefreshLibrary(ctx, movieService, seriesService)
-					log.Printf("refresh metadata: %s", report.Summary())
+					log.Printf("refresh all metadata: %s", report.Summary())
 					return err
 				}})
 			artworkDir := filepath.Join(filepath.Dir(dbPath), "artwork")
