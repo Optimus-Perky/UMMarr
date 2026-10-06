@@ -17,6 +17,7 @@
         <div class="brand-name">UMM<span class="brand-arr">arr</span></div>
       </div>
       {{if .Error}}<p class="notice" style="color:var(--warn)">Incorrect username or password.</p>{{end}}
+      {{if .LockedFor}}<p class="notice" style="color:var(--warn)">Too many wrong passwords. Try again in {{.LockedFor}}.</p>{{end}}
       <input type="text" name="username" placeholder="Username" autofocus required autocomplete="username">
       <input type="password" name="password" placeholder="Password" required autocomplete="current-password">
       <button class="btn" type="submit">Sign in</button>

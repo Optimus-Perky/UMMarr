@@ -11,6 +11,7 @@ package api
 import (
 	"context"
 	"crypto/subtle"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -25,6 +26,8 @@ const sessionDuration = 30 * 24 * time.Hour
 
 type loginPageData struct {
 	Error bool
+	// LockedFor is set while too many wrong passwords keep this address out.
+	LockedFor string
 }
 
 func (h *handler) Login(w http.ResponseWriter, r *http.Request) {
@@ -36,15 +39,25 @@ func (h *handler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
+	addr := clientAddress(r)
+	if wait := h.logins.wait(addr); wait > 0 {
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.WriteHeader(http.StatusTooManyRequests)
+		h.renderLoginPage(w, loginPageData{LockedFor: wait.Round(time.Second).String()})
+		return
+	}
 	ok, err := h.checkCredentials(r.Context(), r.FormValue("username"), r.FormValue("password"))
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if !ok {
+		h.logins.failed(addr)
+		log.Printf("login: wrong username or password from %s", addr)
 		h.renderLoginPage(w, loginPageData{Error: true})
 		return
 	}
+	h.logins.succeeded(addr)
 
 	expiresAt := time.Now().Add(sessionDuration)
 	token, err := h.deps.SessionCipher.NewToken(expiresAt)
@@ -54,7 +67,7 @@ func (h *handler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	http.SetCookie(w, &http.Cookie{
 		Name: sessionCookieName, Value: token, Path: "/", HttpOnly: true,
-		SameSite: http.SameSiteLaxMode, Expires: expiresAt,
+		SameSite: http.SameSiteLaxMode, Expires: expiresAt, Secure: requestIsHTTPS(r),
 	})
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }

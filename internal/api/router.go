@@ -9,7 +9,7 @@ import (
 // http.ServeMux's method+path patterns - no router dependency, matching
 // this project's minimal-dependency pattern throughout every prior pass.
 func NewRouter(deps Deps) http.Handler {
-	h := &handler{deps: deps, pages: parsePages(), partials: parsePartials(), loginPage: parseLoginPage()}
+	h := &handler{deps: deps, pages: parsePages(), partials: parsePartials(), loginPage: parseLoginPage(), logins: newLoginThrottle()}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("GET /login", h.Login)
@@ -297,5 +297,5 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /library/scan-report/{id}/dismiss", h.ScanReportDismiss)
 	mux.HandleFunc("GET /settings/scan-library/status", h.LibraryImportStatus)
 
-	return h.requireAuth(mux)
+	return secureHeaders(crossOriginProtection(h.requireAuth(mux)))
 }

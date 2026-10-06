@@ -130,6 +130,7 @@ type handler struct {
 	pages     map[string]*template.Template
 	partials  *template.Template
 	loginPage *template.Template
+	logins    *loginThrottle
 }
 
 var pageFiles = map[string]string{
