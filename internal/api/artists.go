@@ -256,8 +256,14 @@ func (h *handler) MusicEditorSave(w http.ResponseWriter, r *http.Request) {
 		}
 		edit.QualityProfileID = &id
 	}
+	if tags, mode := strings.TrimSpace(r.FormValue("tags")), r.FormValue("tag_mode"); tags != "" || mode == "replace" {
+		if mode == "" {
+			mode = "add"
+		}
+		edit.TagMode, edit.Tags = mode, strings.Split(tags, ",")
+	}
 	rootFolder := r.FormValue("root_folder_id")
-	if edit.Monitored == nil && edit.QualityProfileID == nil && rootFolder == "" {
+	if edit.Monitored == nil && edit.QualityProfileID == nil && rootFolder == "" && edit.TagMode == "" {
 		renderInlineError(w, "Choose something to change.")
 		return
 	}

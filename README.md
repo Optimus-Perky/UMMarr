@@ -278,6 +278,21 @@ TVMaze and MusicBrainz need no key. TMDB attribution ("This product uses
 the TMDB API but is not endorsed or certified by TMDB") is contractually
 required; it is shown under System → Status.
 
+## Tags, quality definitions and metadata refresh
+
+- **Tags** work as in the *arr apps. Tag movies and series in the library
+  editor or Edit Series, and artists in the Music mass editor. An indexer,
+  download client or notification with tags is then only used for items
+  sharing one of them; one without tags is used for everything, except
+  that an item with no matching download client only uses untagged clients.
+- **Settings → Quality** holds the size limits per video quality, in MB per
+  minute of runtime. Releases outside the range are rejected, and among the
+  rest the one nearest the preferred size ranks first.
+- **Refresh metadata** runs every 12 hours. It refreshes series still
+  airing and movies not yet released or from this year or last; everything
+  else is refreshed every 30 days. Run **Refresh all metadata** from System →
+  Tasks to refresh everything at once.
+
 ## Development
 
 ```

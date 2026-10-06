@@ -81,6 +81,13 @@ func TestArtistPage(t *testing.T) {
 		t.Errorf("want the mass editor to unmonitor the artist")
 	}
 
+	// ...and tags it, which is what tag-restricted indexers, download
+	// clients and notifications go by for music.
+	postForm(t, srv, "/music/editor", url.Values{"id": {id}, "tags": {"lossless"}, "tag_mode": {"add"}})
+	if tags, _ := store.ItemTags(t.Context(), db, sql.NullInt64{}, sql.NullInt64{}, sql.NullInt64{Int64: albumID, Valid: true}); len(tags) != 1 {
+		t.Errorf("want the artist tagged (seen through its album), got %v", tags)
+	}
+
 	// Delete takes its albums with it.
 	if resp, body = postForm(t, srv, "/music/editor/delete", url.Values{"id": {id}}); resp.Header.Get("HX-Redirect") == "" {
 		t.Fatalf("want the artist deleted, got:\n%s", body)

@@ -84,6 +84,9 @@ type ArtistEdit struct {
 	Path             *string
 	// MonitorAlbums also sets every album's monitored flag to Monitored.
 	MonitorAlbums bool
+	// TagMode (add, remove or replace) applies Tags; "" leaves tags alone.
+	TagMode string
+	Tags    []string
 }
 
 // EditArtists applies an edit to each artist.
@@ -109,6 +112,15 @@ func EditArtists(ctx context.Context, q Queryer, ids []int64, e ArtistEdit) erro
 			if _, err := q.ExecContext(ctx, `UPDATE artists SET path = ? WHERE id = ?`, *e.Path, id); err != nil {
 				return fmt.Errorf("update artist %d path: %w", id, err)
 			}
+		}
+		switch e.TagMode {
+		case "":
+		case "add", "remove", "replace":
+			if err := editTags(ctx, q, "artists", id, e.TagMode, e.Tags); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown tag mode %q", e.TagMode)
 		}
 	}
 	return nil
