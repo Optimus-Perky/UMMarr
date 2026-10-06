@@ -162,6 +162,68 @@ func (s *DownloadService) clientFor(ctx context.Context, protocol string) (downl
 	return nil, store.DownloadClient{}, ErrNoDownloadClient{Protocol: protocol}
 }
 
+// clientForRelease picks the client a grab for g's item goes to, following
+// Radarr's DownloadClientProvider:
+//
+//   - only enabled clients for the release's protocol;
+//   - clients sharing a tag with the item when there are any, otherwise
+//     only clients with no tags - a tagged client is reserved for items
+//     with its tags;
+//   - the client the release's indexer names, when it names one (Settings
+//     -> Indexers -> Download Client) and it is among those;
+//   - otherwise the lowest priority number.
+func (s *DownloadService) clientForRelease(ctx context.Context, g store.Grab, release newznab.Release) (downloadclient.Client, store.DownloadClient, error) {
+	rows, err := s.clientRows(ctx)
+	if err != nil {
+		return nil, store.DownloadClient{}, err
+	}
+	var itemTags []int64
+	if s.DB != nil {
+		if itemTags, err = store.ItemTags(ctx, s.DB, g.MovieID, g.SeriesID, g.AlbumID); err != nil {
+			return nil, store.DownloadClient{}, err
+		}
+	}
+	var enabled, matching, untagged []store.DownloadClient
+	for _, dc := range rows {
+		if !dc.Enabled || dc.Protocol() != release.Protocol {
+			continue
+		}
+		enabled = append(enabled, dc)
+		switch {
+		case len(dc.Tags) == 0:
+			untagged = append(untagged, dc)
+		case len(itemTags) > 0 && store.TagsAllow(dc.Tags, itemTags):
+			matching = append(matching, dc)
+		}
+	}
+	if len(enabled) == 0 {
+		return nil, store.DownloadClient{}, ErrNoDownloadClient{Protocol: release.Protocol}
+	}
+	candidates := untagged
+	if len(matching) > 0 {
+		candidates = matching
+	}
+	if len(candidates) == 0 {
+		return nil, store.DownloadClient{}, fmt.Errorf("no %s download client can take this: every enabled one is restricted to tags it doesn't have", release.Protocol)
+	}
+	if release.IndexerID > 0 && s.DB != nil {
+		if ix, err := store.GetIndexer(ctx, s.DB, release.IndexerID); err == nil && ix.DownloadClientID > 0 {
+			for _, dc := range candidates {
+				if dc.ID == int64(ix.DownloadClientID) {
+					c, err := s.Build(dc)
+					return c, dc, err
+				}
+			}
+			// Radarr fails the grab here; a client that was deleted or
+			// disabled since shouldn't strand every release from the
+			// indexer, so fall back to the usual choice and say so.
+			log.Printf("%s names download client %d, which isn't enabled or can't take this item - using %s instead", ix.Name, ix.DownloadClientID, candidates[0].Name)
+		}
+	}
+	c, err := s.Build(candidates[0]) // clientRows is in priority order
+	return c, candidates[0], err
+}
+
 // clientForGrab finds the client a grab went to: its row when it recorded
 // one, otherwise a client running the same program, or any enabled client
 // for its protocol.
@@ -328,7 +390,7 @@ func (s *DownloadService) GrabTrack(ctx context.Context, albumID, trackID int64,
 // It also returns a torrent's infohash, and refuses a torrent whose hash is
 // blocklisted for g's item when its indexer rejects blocklisted hashes.
 func (s *DownloadService) send(ctx context.Context, g store.Grab, release newznab.Release) (string, store.DownloadClient, string, error) {
-	client, dc, err := s.clientFor(ctx, release.Protocol)
+	client, dc, err := s.clientForRelease(ctx, g, release)
 	if err != nil {
 		return "", dc, "", err
 	}

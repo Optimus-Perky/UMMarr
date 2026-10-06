@@ -33,6 +33,9 @@ type Notification struct {
 	OnAdded        bool
 	OnFailed       bool
 	OnHealth       bool
+	// Tags restrict the notification to items sharing one of them (see
+	// TagsAllow); events that aren't about an item, like health, always go.
+	Tags []int64
 }
 
 // Wants reports whether the notification is for events of kind event.
@@ -61,15 +64,16 @@ func (n Notification) Wants(event string) bool {
 // ErrNotificationNotFound means no row has that id.
 var ErrNotificationNotFound = errors.New("notification not found")
 
-const notificationColumns = `id, name, implementation, enabled, settings, on_grab, on_import, on_upgrade, on_rename, on_delete, on_added, on_failed, on_health`
+const notificationColumns = `id, name, implementation, enabled, settings, on_grab, on_import, on_upgrade, on_rename, on_delete, on_added, on_failed, on_health, tags`
 
 func scanNotification(row interface{ Scan(...any) error }) (Notification, error) {
 	var n Notification
-	var settings string
-	err := row.Scan(&n.ID, &n.Name, &n.Implementation, &n.Enabled, &settings, &n.OnGrab, &n.OnImport, &n.OnUpgrade, &n.OnRename, &n.OnDelete, &n.OnAdded, &n.OnFailed, &n.OnHealth)
+	var settings, tags string
+	err := row.Scan(&n.ID, &n.Name, &n.Implementation, &n.Enabled, &settings, &n.OnGrab, &n.OnImport, &n.OnUpgrade, &n.OnRename, &n.OnDelete, &n.OnAdded, &n.OnFailed, &n.OnHealth, &tags)
 	if err != nil {
 		return n, err
 	}
+	n.Tags = parseTagIDs(tags)
 	n.Settings = map[string]string{}
 	_ = json.Unmarshal([]byte(settings), &n.Settings)
 	return n, nil
@@ -123,9 +127,9 @@ func CreateNotification(ctx context.Context, q Queryer, n Notification) (int64, 
 		return 0, err
 	}
 	res, err := q.ExecContext(ctx, `
-		INSERT INTO notifications (name, implementation, enabled, settings, on_grab, on_import, on_upgrade, on_rename, on_delete, on_added, on_failed, on_health)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		n.Name, n.Implementation, n.Enabled, settings, n.OnGrab, n.OnImport, n.OnUpgrade, n.OnRename, n.OnDelete, n.OnAdded, n.OnFailed, n.OnHealth)
+		INSERT INTO notifications (name, implementation, enabled, settings, on_grab, on_import, on_upgrade, on_rename, on_delete, on_added, on_failed, on_health, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		n.Name, n.Implementation, n.Enabled, settings, n.OnGrab, n.OnImport, n.OnUpgrade, n.OnRename, n.OnDelete, n.OnAdded, n.OnFailed, n.OnHealth, tagIDsJSON(n.Tags))
 	if err != nil {
 		return 0, fmt.Errorf("create notification: %w", err)
 	}
@@ -141,9 +145,9 @@ func UpdateNotification(ctx context.Context, q Queryer, n Notification) error {
 	}
 	_, err = q.ExecContext(ctx, `
 		UPDATE notifications SET name = ?, implementation = ?, enabled = ?, settings = ?, on_grab = ?, on_import = ?, on_upgrade = ?,
-			on_rename = ?, on_delete = ?, on_added = ?, on_failed = ?, on_health = ?
+			on_rename = ?, on_delete = ?, on_added = ?, on_failed = ?, on_health = ?, tags = ?
 		WHERE id = ?`,
-		n.Name, n.Implementation, n.Enabled, settings, n.OnGrab, n.OnImport, n.OnUpgrade, n.OnRename, n.OnDelete, n.OnAdded, n.OnFailed, n.OnHealth, n.ID)
+		n.Name, n.Implementation, n.Enabled, settings, n.OnGrab, n.OnImport, n.OnUpgrade, n.OnRename, n.OnDelete, n.OnAdded, n.OnFailed, n.OnHealth, tagIDsJSON(n.Tags), n.ID)
 	if err != nil {
 		return fmt.Errorf("update notification %d: %w", n.ID, err)
 	}

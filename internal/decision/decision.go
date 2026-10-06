@@ -89,6 +89,8 @@ type Engine struct {
 
 	// QualityDefinitions are the size limits per video quality.
 	QualityDefinitions map[string]store.QualityDefinition
+	// TagLabels names tags by id, for rejection messages.
+	TagLabels map[int64]string
 
 	// blocklist holds failed releases by the item they failed for.
 	blocklist map[blocklistKey][]store.BlocklistEntry
@@ -133,9 +135,13 @@ func Load(ctx context.Context, q store.Queryer, userInvoked bool) (*Engine, erro
 	if err != nil {
 		return nil, err
 	}
+	tagLabels, err := store.TagLabelsByID(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	e := &Engine{
-		QualityDefinitions: definitions,
-		Settings:           settings, Propers: media.PropersRepacks, Now: time.Now(), UserInvoked: userInvoked,
+		QualityDefinitions: definitions, TagLabels: tagLabels,
+		Settings: settings, Propers: media.PropersRepacks, Now: time.Now(), UserInvoked: userInvoked,
 		Indexers: map[int64]store.Indexer{}, Profiles: Profiles{},
 		PreferredWords: preferredWords, Protocols: enabledProtocols(ctx, q), Formats: formats,
 	}
@@ -268,6 +274,32 @@ func (e *Engine) sizeRule(d *Decision, runtimeMinutes int) {
 	}
 }
 
+// tagRule follows Radarr's IndexerTagSpecification: an indexer with tags is
+// only for items sharing one of them. Searches still ask it; this is what
+// keeps its releases - from a search or from RSS - off everything else.
+func (e *Engine) tagRule(d *Decision, itemTags []int64) {
+	ix, ok := e.Indexers[d.Release.IndexerID]
+	if !ok {
+		return
+	}
+	// Only tags UMMarr knows count. An indexer synced from Prowlarr can
+	// carry Prowlarr's own tag ids, which mean nothing here - honouring
+	// them would quietly restrict it to whatever UMMarr tag shares the
+	// number.
+	var restrict []int64
+	var labels []string
+	for _, id := range ix.Tags {
+		if label, known := e.TagLabels[int64(id)]; known {
+			restrict = append(restrict, int64(id))
+			labels = append(labels, label)
+		}
+	}
+	if store.TagsAllow(restrict, itemTags) {
+		return
+	}
+	d.reject("%s is only used for items tagged %s", ix.Name, strings.Join(labels, ", "))
+}
+
 // missingFlags follows Radarr's RequiredIndexerFlagsSpecification: a release
 // needs at least one of the required flags. It returns the flags' names when
 // the release has none of them.
@@ -372,6 +404,7 @@ func (e *Engine) Movie(m store.WantedMovie, releases []newznab.Release) []Decisi
 		d := e.release(r, m.QualityProfileID, true)
 		d.Target = Target{MovieID: m.ID}
 		e.sizeRule(&d, m.Runtime)
+		e.tagRule(&d, m.Tags)
 		if ok, reason := MatchMovie(m, r); !ok {
 			d.reject("%s", reason)
 		}
@@ -462,6 +495,7 @@ func (e *Engine) Series(s store.WantedSeries, scope SeriesScope, releases []newz
 	for _, r := range releases {
 		d := e.release(r, s.QualityProfileID, true)
 		d.Target = Target{SeriesID: s.ID}
+		e.tagRule(&d, s.Tags)
 		e.judgeSeries(&d, s, scope)
 		out = append(out, d)
 	}
@@ -552,6 +586,7 @@ func MatchAlbum(a store.WantedAlbum, title string) bool {
 }
 
 func (e *Engine) albumRules(d *Decision, a store.WantedAlbum) {
+	e.tagRule(d, a.Tags)
 	if !e.UserInvoked && !a.Monitored {
 		d.reject("Album isn't monitored")
 	}

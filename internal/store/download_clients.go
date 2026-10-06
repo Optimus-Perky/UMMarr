@@ -33,6 +33,8 @@ type DownloadClient struct {
 	// RemoveFailed deletes a failed download, and its data, from the client
 	// once it has been blocklisted (Sonarr's Remove Failed).
 	RemoveFailed bool
+	// Tags restrict the client to items sharing one of them (see TagsAllow).
+	Tags []int64
 }
 
 // Protocol is "usenet" for SABnzbd, "torrent" for the rest.
@@ -46,11 +48,13 @@ func (c DownloadClient) Protocol() string {
 // ErrDownloadClientNotFound means no row has that id.
 var ErrDownloadClientNotFound = errors.New("download client not found")
 
-const downloadClientColumns = `id, name, implementation, enabled, priority, base_url, username, password, api_key, category, remote_path, local_path, remove_failed`
+const downloadClientColumns = `id, name, implementation, enabled, priority, base_url, username, password, api_key, category, remote_path, local_path, remove_failed, tags`
 
 func scanDownloadClient(row interface{ Scan(...any) error }) (DownloadClient, error) {
 	var c DownloadClient
-	err := row.Scan(&c.ID, &c.Name, &c.Implementation, &c.Enabled, &c.Priority, &c.BaseURL, &c.Username, &c.Password, &c.APIKey, &c.Category, &c.RemotePath, &c.LocalPath, &c.RemoveFailed)
+	var tags string
+	err := row.Scan(&c.ID, &c.Name, &c.Implementation, &c.Enabled, &c.Priority, &c.BaseURL, &c.Username, &c.Password, &c.APIKey, &c.Category, &c.RemotePath, &c.LocalPath, &c.RemoveFailed, &tags)
+	c.Tags = parseTagIDs(tags)
 	return c, err
 }
 
@@ -87,9 +91,9 @@ func GetDownloadClient(ctx context.Context, q Queryer, id int64) (DownloadClient
 // CreateDownloadClient adds a client.
 func CreateDownloadClient(ctx context.Context, q Queryer, c DownloadClient) (int64, error) {
 	res, err := q.ExecContext(ctx, `
-		INSERT INTO download_clients (name, implementation, enabled, priority, base_url, username, password, api_key, category, remote_path, local_path, remove_failed)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		c.Name, c.Implementation, c.Enabled, c.Priority, c.BaseURL, c.Username, c.Password, c.APIKey, c.Category, c.RemotePath, c.LocalPath, c.RemoveFailed)
+		INSERT INTO download_clients (name, implementation, enabled, priority, base_url, username, password, api_key, category, remote_path, local_path, remove_failed, tags)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		c.Name, c.Implementation, c.Enabled, c.Priority, c.BaseURL, c.Username, c.Password, c.APIKey, c.Category, c.RemotePath, c.LocalPath, c.RemoveFailed, tagIDsJSON(c.Tags))
 	if err != nil {
 		return 0, fmt.Errorf("create download client: %w", err)
 	}
@@ -102,9 +106,9 @@ func UpdateDownloadClient(ctx context.Context, q Queryer, c DownloadClient) erro
 	_, err := q.ExecContext(ctx, `
 		UPDATE download_clients SET name = ?, implementation = ?, enabled = ?, priority = ?, base_url = ?, username = ?,
 			password = CASE WHEN ? = '' THEN password ELSE ? END, api_key = CASE WHEN ? = '' THEN api_key ELSE ? END,
-			category = ?, remote_path = ?, local_path = ?, remove_failed = ?
+			category = ?, remote_path = ?, local_path = ?, remove_failed = ?, tags = ?
 		WHERE id = ?`,
-		c.Name, c.Implementation, c.Enabled, c.Priority, c.BaseURL, c.Username, c.Password, c.Password, c.APIKey, c.APIKey, c.Category, c.RemotePath, c.LocalPath, c.RemoveFailed, c.ID)
+		c.Name, c.Implementation, c.Enabled, c.Priority, c.BaseURL, c.Username, c.Password, c.Password, c.APIKey, c.APIKey, c.Category, c.RemotePath, c.LocalPath, c.RemoveFailed, tagIDsJSON(c.Tags), c.ID)
 	if err != nil {
 		return fmt.Errorf("update download client %d: %w", c.ID, err)
 	}

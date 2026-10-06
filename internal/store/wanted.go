@@ -65,6 +65,8 @@ type WantedMovie struct {
 	// Runtime is in minutes, 0 when the providers didn't say - what the
 	// quality definitions' size limits are measured against.
 	Runtime int
+	// Tags decide which tag-restricted indexers may be used for it.
+	Tags []int64
 }
 
 const wantedMovieSelect = `
@@ -76,14 +78,15 @@ const wantedMovieSelect = `
 	       COALESCE((SELECT e.external_id FROM external_ids e WHERE e.entity_type = 'movie' AND e.entity_id = mm.id AND e.provider = 'imdb'), ''),
 	       COALESCE((SELECT f.quality FROM movie_files f WHERE f.movie_id = m.id ORDER BY f.id DESC LIMIT 1), '{}'),
 	       COALESCE((SELECT g.release_title FROM grabs g WHERE g.movie_id = m.id AND g.status = 'imported' ORDER BY g.added DESC LIMIT 1), ''),
-	       COALESCE(mm.runtime, 0)
+	       COALESCE(mm.runtime, 0), m.tags
 	FROM movies m JOIN movie_metadata mm ON mm.id = m.movie_metadata_id`
 
 func scanWantedMovie(row interface{ Scan(...any) error }) (WantedMovie, error) {
 	var m WantedMovie
-	var tmdb, quality string
+	var tmdb, quality, tags string
 	err := row.Scan(&m.ID, &m.Title, &m.OriginalTitle, &m.Year, &m.Monitored, &m.HasFile, &m.Queued,
-		&m.MinimumAvailability, &m.InCinemas, &m.PhysicalRelease, &m.DigitalRelease, &m.QualityProfileID, &tmdb, &m.IMDbID, &quality, &m.FileRelease, &m.Runtime)
+		&m.MinimumAvailability, &m.InCinemas, &m.PhysicalRelease, &m.DigitalRelease, &m.QualityProfileID, &tmdb, &m.IMDbID, &quality, &m.FileRelease, &m.Runtime, &tags)
+	m.Tags = parseTagIDs(tags)
 	m.FileQuality = unmarshalQuality(quality)
 	m.TMDbID, _ = strconv.Atoi(tmdb)
 	return m, err
@@ -145,6 +148,7 @@ type WantedSeries struct {
 	Monitored        bool
 	QualityProfileID sql.NullInt64
 	Runtime          int // minutes, 0 when unknown
+	Tags             []int64
 	Episodes         []WantedEpisode
 }
 
@@ -208,13 +212,14 @@ func loadWantedEpisodes(ctx context.Context, q Queryer, s *WantedSeries) error {
 const wantedSeriesSelect = `
 	SELECT s.id, sm.title, COALESCE(sm.year, 0), s.monitored, s.quality_profile_id,
 	       COALESCE((SELECT e.external_id FROM external_ids e WHERE e.entity_type = 'series' AND e.entity_id = sm.id AND e.provider = 'tvdb'), ''),
-	       COALESCE(sm.runtime, 0)
+	       COALESCE(sm.runtime, 0), s.tags
 	FROM series s JOIN series_metadata sm ON sm.id = s.series_metadata_id`
 
 func scanWantedSeries(row interface{ Scan(...any) error }) (WantedSeries, error) {
 	var s WantedSeries
-	var tvdb string
-	err := row.Scan(&s.ID, &s.Title, &s.Year, &s.Monitored, &s.QualityProfileID, &tvdb, &s.Runtime)
+	var tvdb, tags string
+	err := row.Scan(&s.ID, &s.Title, &s.Year, &s.Monitored, &s.QualityProfileID, &tvdb, &s.Runtime, &tags)
+	s.Tags = parseTagIDs(tags)
 	s.TVDBID, _ = strconv.Atoi(tvdb)
 	return s, err
 }
@@ -279,6 +284,7 @@ type WantedAlbum struct {
 	Monitored        bool
 	Queued           bool
 	QualityProfileID sql.NullInt64
+	Tags             []int64 // the artist's
 	Tracks           []WantedTrack
 }
 
@@ -296,7 +302,7 @@ func (a WantedAlbum) FileCount() int {
 const wantedAlbumSelect = `
 	SELECT al.id, am.name, al.title, al.release_date, al.monitored AND COALESCE(ar.monitored, 1),
 	       EXISTS (SELECT 1 FROM grabs g WHERE g.album_id = al.id AND g.status IN (` + queuedGrabStatuses + `)),
-	       ar.quality_profile_id
+	       ar.quality_profile_id, COALESCE(ar.tags, '[]')
 	FROM albums al
 	JOIN artist_metadata am ON am.id = al.artist_metadata_id
 	LEFT JOIN artists ar ON ar.artist_metadata_id = al.artist_metadata_id`
@@ -318,8 +324,10 @@ func loadWantedTracks(ctx context.Context, q Queryer, a *WantedAlbum) error {
 // GetWantedAlbum reads one album with its tracks.
 func GetWantedAlbum(ctx context.Context, q Queryer, albumID int64) (WantedAlbum, error) {
 	var a WantedAlbum
+	var tags string
 	err := q.QueryRowContext(ctx, wantedAlbumSelect+` WHERE al.id = ?`, albumID).
-		Scan(&a.ID, &a.Artist, &a.Title, &a.ReleaseDate, &a.Monitored, &a.Queued, &a.QualityProfileID)
+		Scan(&a.ID, &a.Artist, &a.Title, &a.ReleaseDate, &a.Monitored, &a.Queued, &a.QualityProfileID, &tags)
+	a.Tags = parseTagIDs(tags)
 	if err != nil {
 		return WantedAlbum{}, fmt.Errorf("get wanted album %d: %w", albumID, err)
 	}
@@ -340,10 +348,12 @@ func ListWantedAlbums(ctx context.Context, q Queryer) ([]WantedAlbum, error) {
 	var out []WantedAlbum
 	for rows.Next() {
 		var a WantedAlbum
-		if err := rows.Scan(&a.ID, &a.Artist, &a.Title, &a.ReleaseDate, &a.Monitored, &a.Queued, &a.QualityProfileID); err != nil {
+		var tags string
+		if err := rows.Scan(&a.ID, &a.Artist, &a.Title, &a.ReleaseDate, &a.Monitored, &a.Queued, &a.QualityProfileID, &tags); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan wanted album: %w", err)
 		}
+		a.Tags = parseTagIDs(tags)
 		out = append(out, a)
 	}
 	rows.Close()
@@ -412,10 +422,12 @@ func ListUpgradableAlbums(ctx context.Context, q Queryer) ([]WantedAlbum, error)
 	var out []WantedAlbum
 	for rows.Next() {
 		var a WantedAlbum
-		if err := rows.Scan(&a.ID, &a.Artist, &a.Title, &a.ReleaseDate, &a.Monitored, &a.Queued, &a.QualityProfileID); err != nil {
+		var tags string
+		if err := rows.Scan(&a.ID, &a.Artist, &a.Title, &a.ReleaseDate, &a.Monitored, &a.Queued, &a.QualityProfileID, &tags); err != nil {
 			rows.Close()
 			return nil, fmt.Errorf("scan upgradable album: %w", err)
 		}
+		a.Tags = parseTagIDs(tags)
 		out = append(out, a)
 	}
 	rows.Close()

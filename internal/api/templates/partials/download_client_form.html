@@ -90,6 +90,13 @@
         <span class="setting-help">A failed download is blocklisted either way; this also deletes it from {{$dc.Name}}.</span>
       </div>
     </div>
+    <div class="setting-row">
+      <div class="setting-label">Tags</div>
+      <div class="setting-control">
+        <input type="text" name="tags" value="{{.TagsText}}" placeholder="e.g. anime, kids" autocomplete="off">
+        <span class="setting-help">Only used for movies, series and artists with at least one of these tags; items without a matching tag use the clients that have none. Leave blank to use it for everything.</span>
+      </div>
+    </div>
     <div id="download-client-test-result"></div>
   </div>
   <div class="dialog-foot">

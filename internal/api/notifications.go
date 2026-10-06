@@ -51,6 +51,7 @@ type notificationFormData struct {
 	Notification notificationView
 	IsNew        bool
 	Errors       map[string]string
+	TagsText     string // the notification's tags, comma separated
 }
 
 func defaultNotification(implementation string) store.Notification {
@@ -164,7 +165,7 @@ func (h *handler) notificationFromPath(w http.ResponseWriter, r *http.Request) (
 
 func (h *handler) EditNotificationForm(w http.ResponseWriter, r *http.Request) {
 	if n, ok := h.notificationFromPath(w, r); ok {
-		h.renderPartial(w, "notification_form", notificationFormData{Notification: notificationViewOf(n)})
+		h.renderPartial(w, "notification_form", notificationFormData{Notification: notificationViewOf(n), TagsText: store.TagText(r.Context(), h.deps.DB, n.Tags)})
 	}
 }
 
@@ -174,14 +175,19 @@ func (h *handler) saveNotification(w http.ResponseWriter, r *http.Request, exist
 		return
 	}
 	n, errs := parseNotificationForm(r, existing)
+	tags, err := store.TagIDsFromText(r.Context(), h.deps.DB, r.FormValue("tags"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	n.Tags = tags
 	if taken, err := store.NotificationNameTaken(r.Context(), h.deps.DB, n.Name, n.ID); err == nil && taken {
 		errs["name"] = "Another notification already has that name."
 	}
 	if len(errs) > 0 {
-		h.renderPartial(w, "notification_form", notificationFormData{Notification: notificationViewOf(n), IsNew: isNew, Errors: errs})
+		h.renderPartial(w, "notification_form", notificationFormData{Notification: notificationViewOf(n), IsNew: isNew, Errors: errs, TagsText: r.FormValue("tags")})
 		return
 	}
-	var err error
 	if isNew {
 		_, err = store.CreateNotification(r.Context(), h.deps.DB, n)
 	} else {

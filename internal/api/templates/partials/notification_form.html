@@ -33,6 +33,13 @@
         <label class="setting-check"><input type="checkbox" name="on_health"{{if $n.OnHealth}} checked{{end}}> Health issue</label>
       </div>
     </div>
+    <div class="setting-row">
+      <div class="setting-label">Tags</div>
+      <div class="setting-control">
+        <input type="text" name="tags" value="{{.TagsText}}" placeholder="e.g. anime, kids" autocomplete="off">
+        <span class="setting-help">Only notify about movies, series and artists with at least one of these tags. Health issues always go. Leave blank for everything.</span>
+      </div>
+    </div>
     {{if eq $n.Implementation "discord"}}
     <div class="setting-row"><div class="setting-label">Webhook URL</div><div class="setting-control"><input type="password" name="webhook_url" placeholder="{{if index $set "webhook_url"}}•••••••• (set - leave blank to keep){{else}}https://discord.com/api/webhooks/…{{end}}" autocomplete="new-password"><span class="setting-help">Server Settings → Integrations → Webhooks in Discord.</span>{{with index $errors "webhook_url"}}<span class="setting-error">{{.}}</span>{{end}}</div></div>
     <div class="setting-row"><div class="setting-label">Username</div><div class="setting-control"><input type="text" name="username" value="{{index $s "username"}}" placeholder="UMMarr"><span class="setting-help">Shown as the sender; leave blank for UMMarr.</span></div></div>

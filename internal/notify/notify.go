@@ -49,8 +49,24 @@ func (s *Service) OnEvent(ctx context.Context, e store.Event) {
 		log.Printf("notify: %v", err)
 		return
 	}
+	// Tags only narrow events about a library item; a health warning has no
+	// item and goes to everything that wants it. Read once, and only if
+	// some notification is restricted.
+	var itemTags []int64
+	itemEvent := e.MovieID.Valid || e.SeriesID.Valid || e.AlbumID.Valid
+	for _, n := range notifications {
+		if len(n.Tags) > 0 && itemEvent {
+			if itemTags, err = store.ItemTags(ctx, s.DB, e.MovieID, e.SeriesID, e.AlbumID); err != nil {
+				log.Printf("notify: %v", err)
+			}
+			break
+		}
+	}
 	for _, n := range notifications {
 		if !n.Enabled || !n.Wants(e.Event) {
+			continue
+		}
+		if itemEvent && !store.TagsAllow(n.Tags, itemTags) {
 			continue
 		}
 		send := func(n store.Notification) {

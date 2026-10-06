@@ -45,9 +45,10 @@ func (h *handler) downloadClientViews(ctx context.Context) ([]downloadClientView
 }
 
 type downloadClientFormData struct {
-	Client downloadClientView
-	IsNew  bool
-	Errors map[string]string
+	Client   downloadClientView
+	IsNew    bool
+	Errors   map[string]string
+	TagsText string // the client's tags, comma separated
 }
 
 func defaultDownloadClient(implementation string) store.DownloadClient {
@@ -137,7 +138,7 @@ func (h *handler) downloadClientFromPath(w http.ResponseWriter, r *http.Request)
 
 func (h *handler) EditDownloadClientForm(w http.ResponseWriter, r *http.Request) {
 	if dc, ok := h.downloadClientFromPath(w, r); ok {
-		h.renderPartial(w, "download_client_form", downloadClientFormData{Client: clientView(dc, false)})
+		h.renderPartial(w, "download_client_form", downloadClientFormData{Client: clientView(dc, false), TagsText: store.TagText(r.Context(), h.deps.DB, dc.Tags)})
 	}
 }
 
@@ -147,16 +148,21 @@ func (h *handler) saveDownloadClient(w http.ResponseWriter, r *http.Request, exi
 		return
 	}
 	dc, errs := parseDownloadClientForm(r, existing)
+	tags, err := store.TagIDsFromText(r.Context(), h.deps.DB, r.FormValue("tags"))
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	dc.Tags = tags
 	if taken, err := store.DownloadClientNameTaken(r.Context(), h.deps.DB, dc.Name, dc.ID); err == nil && taken {
 		errs["name"] = "Another download client already has that name."
 	}
 	if len(errs) > 0 {
 		view := clientView(dc, false)
 		view.PasswordSet, view.APIKeySet = existing.Password != "", existing.APIKey != ""
-		h.renderPartial(w, "download_client_form", downloadClientFormData{Client: view, IsNew: isNew, Errors: errs})
+		h.renderPartial(w, "download_client_form", downloadClientFormData{Client: view, IsNew: isNew, Errors: errs, TagsText: r.FormValue("tags")})
 		return
 	}
-	var err error
 	if isNew {
 		_, err = store.CreateDownloadClient(r.Context(), h.deps.DB, dc)
 	} else {

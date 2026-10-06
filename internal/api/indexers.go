@@ -97,6 +97,43 @@ type indexerFormData struct {
 	Flags          []flagOption
 
 	SeedRatio, SeedTime, SeasonPackSeedTime, DiscographySeedTime string
+
+	// Filled in by indexerForm, which can read the database.
+	DownloadClients  []store.DownloadClient
+	DownloadClientID int64
+	TagsText         string
+}
+
+// indexerForm is newIndexerFormData plus what the dialog reads from the
+// database: the download clients to choose from and the tags as text.
+// tagsText overrides the stored tags when re-showing a rejected form.
+func (h *handler) indexerForm(r *http.Request, ix store.Indexer, isNew bool, errs map[string]string, tagsText *string) indexerFormData {
+	d := newIndexerFormData(ix, isNew, errs)
+	d.DownloadClients, _ = store.ListDownloadClients(r.Context(), h.deps.DB)
+	d.DownloadClientID = int64(ix.DownloadClientID)
+	if tagsText != nil {
+		d.TagsText = *tagsText
+	} else {
+		d.TagsText = store.TagText(r.Context(), h.deps.DB, ix.Tags)
+	}
+	return d
+}
+
+// applyIndexerTagsAndClient reads the dialog's Tags and Download Client.
+func (h *handler) applyIndexerTagsAndClient(r *http.Request, ix *store.Indexer) error {
+	ids, err := store.TagIDsFromText(r.Context(), h.deps.DB, r.FormValue("tags"))
+	if err != nil {
+		return err
+	}
+	ix.Tags = make([]int, len(ids))
+	for i, id := range ids {
+		ix.Tags[i] = int(id)
+	}
+	if raw := r.FormValue("download_client_id"); raw != "" {
+		n, _ := strconv.Atoi(raw)
+		ix.DownloadClientID = max(n, 0)
+	}
+	return nil
 }
 
 func contains(ids []int, id int) bool {
@@ -278,7 +315,7 @@ func (h *handler) NewIndexerForm(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "implementation must be Torznab or Newznab", http.StatusBadRequest)
 		return
 	}
-	h.renderPartial(w, "indexer_form", newIndexerFormData(defaultIndexer(implementation), true, nil))
+	h.renderPartial(w, "indexer_form", h.indexerForm(r, defaultIndexer(implementation), true, nil, nil))
 }
 
 func (h *handler) indexerFromPath(w http.ResponseWriter, r *http.Request) (store.Indexer, bool) {
@@ -301,7 +338,7 @@ func (h *handler) indexerFromPath(w http.ResponseWriter, r *http.Request) (store
 
 func (h *handler) EditIndexerForm(w http.ResponseWriter, r *http.Request) {
 	if ix, ok := h.indexerFromPath(w, r); ok {
-		h.renderPartial(w, "indexer_form", newIndexerFormData(ix, false, nil))
+		h.renderPartial(w, "indexer_form", h.indexerForm(r, ix, false, nil, nil))
 	}
 }
 
@@ -314,7 +351,12 @@ func (h *handler) CreateIndexer(w http.ResponseWriter, r *http.Request) {
 	}
 	ix, errs := parseIndexerForm(r, defaultIndexer(r.FormValue("implementation")))
 	if len(errs) > 0 {
-		h.renderPartial(w, "indexer_form", newIndexerFormData(ix, true, errs))
+		tagsText := r.FormValue("tags")
+		h.renderPartial(w, "indexer_form", h.indexerForm(r, ix, true, errs, &tagsText))
+		return
+	}
+	if err := h.applyIndexerTagsAndClient(r, &ix); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if _, err := store.CreateIndexer(r.Context(), h.deps.DB, ix); err != nil {
@@ -337,7 +379,12 @@ func (h *handler) UpdateIndexer(w http.ResponseWriter, r *http.Request) {
 	}
 	ix, errs := parseIndexerForm(r, existing)
 	if len(errs) > 0 {
-		h.renderPartial(w, "indexer_form", newIndexerFormData(ix, false, errs))
+		tagsText := r.FormValue("tags")
+		h.renderPartial(w, "indexer_form", h.indexerForm(r, ix, false, errs, &tagsText))
+		return
+	}
+	if err := h.applyIndexerTagsAndClient(r, &ix); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	if err := store.UpdateIndexer(r.Context(), h.deps.DB, ix); err != nil {

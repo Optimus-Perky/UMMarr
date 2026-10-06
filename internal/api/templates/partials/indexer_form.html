@@ -181,8 +181,18 @@
     <div class="setting-row advanced">
       <div class="setting-label">Download Client</div>
       <div class="setting-control">
-        <span class="setting-check">By protocol</span>
-        <span class="setting-help">Grabs go to the enabled download client for the release's protocol (Settings → Download Clients).</span>
+        <select class="select" name="download_client_id">
+          <option value="0">Any (by protocol and priority)</option>
+          {{range .DownloadClients}}<option value="{{.ID}}"{{if eq .ID $.DownloadClientID}} selected{{end}}>{{.Name}}</option>{{end}}
+        </select>
+        <span class="setting-help">Send this indexer's releases to one download client rather than the usual choice by protocol, tags and priority.</span>
+      </div>
+    </div>
+    <div class="setting-row advanced">
+      <div class="setting-label">Tags</div>
+      <div class="setting-control">
+        <input type="text" name="tags" value="{{.TagsText}}" placeholder="e.g. anime, kids" autocomplete="off">
+        <span class="setting-help">Only use this indexer's releases for movies, series and artists with at least one of these tags. Leave blank to use it for everything.</span>
       </div>
     </div>
     <div id="indexer-test-result"></div>
