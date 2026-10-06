@@ -13,6 +13,7 @@ import (
 	gosync "sync"
 
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/discogs"
+	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/httpclient"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/titleutil"
 )
@@ -144,7 +145,7 @@ func (f *CoverFetcher) findCover(ctx context.Context, c store.AlbumEditionCandid
 func (f *CoverFetcher) download(ctx context.Context, albumID int64, url string) (string, error) {
 	client := f.HTTP
 	if client == nil {
-		client = http.DefaultClient
+		client = httpclient.DefaultHTTP
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {

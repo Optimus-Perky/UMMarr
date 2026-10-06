@@ -18,6 +18,21 @@ import (
 	"golang.org/x/time/rate"
 )
 
+// DefaultHTTP is the client used when Client.HTTP is nil.
+// http.DefaultClient has no timeout at all, so one provider connection
+// that stalls - accepted, then never answered - would hang the refresh or
+// task waiting on it for good.
+var DefaultHTTP = &http.Client{Timeout: 30 * time.Second}
+
+// maxRetryAfter caps how long a Retry-After is honoured. A provider
+// asking for an hour (or sending garbage) shouldn't park a task for that
+// long; past this the request fails and the next run tries again.
+const maxRetryAfter = 5 * time.Minute
+
+// maxBodyBytes bounds a response. The largest real one - a long-running
+// series with every season appended - is a few megabytes.
+const maxBodyBytes = 32 << 20
+
 // Client performs rate-limited HTTP GETs with retry-on-429. HTTP and
 // BaseURL are both overridable so tests can point at an httptest.Server
 // with no live network calls.
@@ -53,7 +68,7 @@ func (e *StatusError) Error() string {
 func (c *Client) Get(ctx context.Context, path string, query url.Values, headers http.Header) ([]byte, error) {
 	httpClient := c.HTTP
 	if httpClient == nil {
-		httpClient = http.DefaultClient
+		httpClient = DefaultHTTP
 	}
 
 	reqURL := c.BaseURL + path
@@ -84,19 +99,29 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values, headers
 
 		resp, err := httpClient.Do(req)
 		if err != nil {
-			return nil, fmt.Errorf("do request: %w", err)
+			// A dropped connection or a timeout is as transient as a 503 -
+			// worth another go unless the caller itself gave up.
+			lastErr = fmt.Errorf("do request: %w", err)
+			if ctx.Err() != nil || attempt == c.MaxRetries {
+				return nil, lastErr
+			}
+			if err := sleepBackoff(ctx, "", attempt, 0); err != nil {
+				return nil, err
+			}
+			continue
 		}
-		body, readErr := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, maxBodyBytes))
 		resp.Body.Close()
 		if readErr != nil {
 			return nil, fmt.Errorf("read response body: %w", readErr)
 		}
 
-		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode == http.StatusServiceUnavailable {
+		if retryableStatus(resp.StatusCode) {
 			// 503 observed live from MusicBrainz under normal load
 			// ("currently busy, please try again later") - a transient
 			// overload signal worth retrying the same as 429, not just a
-			// hard-limit response.
+			// hard-limit response. 502 and 504 are the same thing from a
+			// gateway in front of the provider.
 			lastErr = &StatusError{StatusCode: resp.StatusCode, Body: string(body)}
 			if attempt == c.MaxRetries {
 				break
@@ -117,6 +142,14 @@ func (c *Client) Get(ctx context.Context, path string, query url.Values, headers
 	return nil, lastErr
 }
 
+func retryableStatus(code int) bool {
+	switch code {
+	case http.StatusTooManyRequests, http.StatusBadGateway, http.StatusServiceUnavailable, http.StatusGatewayTimeout:
+		return true
+	}
+	return false
+}
+
 // retryWait is how long to hold off before retrying, kept apart from the
 // sleeping so it can be checked without one.
 func retryWait(retryAfter string, attempt int, minWait time.Duration) time.Duration {
@@ -129,11 +162,14 @@ func retryWait(retryAfter string, attempt int, minWait time.Duration) time.Durat
 		}
 	}
 	if retryAfter != "" {
-		if secs, err := strconv.Atoi(retryAfter); err == nil {
+		// Seconds, or an HTTP date - RFC 9110 allows either.
+		if secs, err := strconv.Atoi(retryAfter); err == nil && secs >= 0 {
 			wait = time.Duration(secs) * time.Second
+		} else if at, err := http.ParseTime(retryAfter); err == nil {
+			wait = max(time.Until(at), 0)
 		}
 	}
-	return wait
+	return min(wait, maxRetryAfter)
 }
 
 func sleepBackoff(ctx context.Context, retryAfter string, attempt int, minWait time.Duration) error {
