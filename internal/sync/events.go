@@ -4,8 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -28,7 +28,7 @@ func (s *Events) Record(ctx context.Context, e store.Event) {
 	}
 	id, err := store.RecordEvent(ctx, s.DB, e)
 	if err != nil {
-		log.Printf("history: %v", err)
+		logging.Errorf("history: %v", err)
 		return
 	}
 	e.ID = id

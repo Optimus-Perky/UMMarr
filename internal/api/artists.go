@@ -3,11 +3,11 @@ package api
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
@@ -365,7 +365,7 @@ func (h *handler) MusicEditorSearch(w http.ResponseWriter, r *http.Request) {
 		ctx := context.Background()
 		for _, id := range ids {
 			if _, err := search.SearchArtist(ctx, id); err != nil {
-				log.Printf("mass editor search artist %d: %v", id, err)
+				logging.Warnf("mass editor search artist %d: %v", id, err)
 			}
 		}
 	})

@@ -156,6 +156,7 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("GET /history", h.History)
 	mux.HandleFunc("GET /system", h.System)
 	mux.HandleFunc("GET /system/{tab}", h.System)
+	mux.HandleFunc("GET /system/logs/file", h.LogFileDownload)
 	mux.HandleFunc("POST /system/tasks/{name}/run", h.RunTask)
 	mux.HandleFunc("POST /system/backups", h.CreateBackup)
 	mux.HandleFunc("GET /system/backups/{name}/download", h.DownloadBackup)
@@ -191,6 +192,7 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("DELETE /settings/preferred-words/{id}", h.DeletePreferredWord)
 	mux.HandleFunc("POST /settings/account", h.UpdateAccount)
 	mux.HandleFunc("POST /settings/host", h.UpdateHostSettings)
+	mux.HandleFunc("POST /settings/logging", h.UpdateLogLevel)
 	mux.HandleFunc("POST /settings/metadata", h.UpdateMetadataSettings)
 	mux.HandleFunc("POST /settings/metadata-sources/move", h.MoveMetadataSource)
 	mux.HandleFunc("GET /settings/metadata-sources/new", h.NewMetadataProviderForm)
@@ -298,5 +300,5 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /library/scan-report/{id}/dismiss", h.ScanReportDismiss)
 	mux.HandleFunc("GET /settings/scan-library/status", h.LibraryImportStatus)
 
-	return secureHeaders(crossOriginProtection(h.requireAuth(mux)))
+	return logRequests(secureHeaders(crossOriginProtection(h.requireAuth(mux))))
 }

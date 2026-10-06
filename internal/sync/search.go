@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"sort"
 	"strings"
 	gosync "sync"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/Optimus-Perky/UMMarr/internal/decision"
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
@@ -98,6 +98,13 @@ func (r *SearchReport) add(result SearchResult, decisions []decision.Decision) {
 		for _, reason := range d.Rejections {
 			counts[reason]++
 		}
+		if logging.Enabled(logging.Diagnostic) {
+			if d.Approved() {
+				logging.Tracef("decision: approved %q (%s, from %s)", d.Release.Title, d.Quality.Key(), d.Release.Indexer)
+			} else {
+				logging.Tracef("decision: rejected %q (from %s): %s", d.Release.Title, d.Release.Indexer, strings.Join(d.Rejections, "; "))
+			}
+		}
 	}
 	reasons := make([]string, 0, len(counts))
 	for reason := range counts {
@@ -123,8 +130,10 @@ func (r *SearchReport) grabbed(d decision.Decision, what string) {
 func grabBest(decisions []decision.Decision, report *SearchReport, grab func(decision.Decision) error) {
 	best, ok := decision.Best(decisions)
 	if !ok {
+		logging.Debugf("search: nothing to grab - %d release(s) found, none approved", len(decisions))
 		return
 	}
+	logging.Debugf("search: best release is %q (%s, from %s)", best.Release.Title, best.Quality.Key(), best.Release.Indexer)
 	if err := grab(best); err != nil {
 		report.GrabErrors = append(report.GrabErrors, fmt.Sprintf("Couldn't grab %s: %v", best.Release.Title, err))
 		return
@@ -184,7 +193,7 @@ func (s *SearchService) SearchMovie(ctx context.Context, movieID int64) (SearchR
 }
 
 func (s *SearchService) searchMovie(ctx context.Context, engine *decision.Engine, movie store.WantedMovie, report *SearchReport) {
-	result := s.Indexers.SearchMovie(ctx, PurposeAutomatic, MovieCriteria{Title: movie.Title, Year: movie.Year, TMDbID: movie.TMDbID, IMDbID: movie.IMDbID})
+	result := s.Indexers.SearchMovie(ctx, PurposeAutomatic, MovieCriteria{Title: movie.Title, Year: movie.Year, TMDbID: movie.TMDbID, IMDbID: movie.IMDbID, Tags: movie.Tags})
 	decisions := engine.Movie(movie, result.Releases)
 	report.add(result, decisions)
 	grabBest(decisions, report, func(d decision.Decision) error {
@@ -242,7 +251,7 @@ func (s *SearchService) searchSeries(ctx context.Context, engine *decision.Engin
 		}
 		if allAired {
 			seasonNumber := n
-			criteria := SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID, Season: &seasonNumber}
+			criteria := SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID, Season: &seasonNumber, Tags: series.Tags}
 			result := s.Indexers.SearchSeries(ctx, PurposeAutomatic, criteria)
 			decisions := engine.Series(series, decision.SeriesScope{Season: &seasonNumber}, result.Releases)
 			report.add(result, decisions)
@@ -279,7 +288,7 @@ func (s *SearchService) SearchEpisode(ctx context.Context, seriesID, episodeID i
 
 func (s *SearchService) searchEpisode(ctx context.Context, engine *decision.Engine, series store.WantedSeries, ep store.WantedEpisode, taken map[int64]bool, report *SearchReport) {
 	season, episode := ep.SeasonNumber, ep.EpisodeNumber
-	criteria := SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID, Season: &season, Episode: &episode}
+	criteria := SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID, Season: &season, Episode: &episode, Tags: series.Tags}
 	result := s.Indexers.SearchSeries(ctx, PurposeAutomatic, criteria)
 	decisions := engine.Series(series, decision.SeriesScope{Season: &season, Episode: &episode}, result.Releases)
 	report.add(result, decisions)
@@ -302,7 +311,7 @@ func (s *SearchService) SearchAlbum(ctx context.Context, albumID int64) (SearchR
 }
 
 func (s *SearchService) searchAlbum(ctx context.Context, engine *decision.Engine, album store.WantedAlbum, report *SearchReport) {
-	result := s.Indexers.SearchAlbum(ctx, PurposeAutomatic, AlbumCriteria{Artist: album.Artist, Album: album.Title})
+	result := s.Indexers.SearchAlbum(ctx, PurposeAutomatic, AlbumCriteria{Artist: album.Artist, Album: album.Title, Tags: album.Tags})
 	decisions := engine.Album(album, result.Releases)
 	report.add(result, decisions)
 	grabBest(decisions, report, func(d decision.Decision) error {
@@ -364,7 +373,7 @@ func (s *SearchService) StartMissingSearch(mediaType, mode string) bool {
 			}
 		})
 		if err != nil {
-			log.Printf("search all missing %s: %v", mediaType, err)
+			logging.Errorf("search all missing %s: %v", mediaType, err)
 		}
 	})
 	return true
@@ -427,7 +436,7 @@ func (s *SearchService) searchAllMissing(ctx context.Context, mediaType, mode st
 // Recent fetches the newest releases from every RSS-enabled indexer, in all
 // of its categories.
 func (s *IndexerService) Recent(ctx context.Context) SearchResult {
-	return s.run(ctx, PurposeRSS, "", func(ctx context.Context, c *newznab.Client, _ newznab.Caps, _ bool, cats []int) ([]newznab.Release, error) {
+	return s.run(ctx, PurposeRSS, "", nil, false, func(ctx context.Context, c *newznab.Client, _ newznab.Caps, _ bool, cats []int) ([]newznab.Release, error) {
 		return c.Recent(ctx, cats)
 	})
 }
@@ -581,7 +590,7 @@ func (s *SearchService) rssSync(ctx context.Context) (SearchReport, error) {
 		for i, g := range grabbed {
 			titles[i] = g.Release
 		}
-		log.Printf("rss sync grabbed: %s", strings.Join(titles, "; "))
+		logging.Infof("rss sync grabbed: %s", strings.Join(titles, "; "))
 	}
 	return report, nil
 }

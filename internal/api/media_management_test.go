@@ -285,7 +285,7 @@ func TestSettings_RootFoldersShowFreeSpaceAndUnmappedFolders(t *testing.T) {
 func TestSettings_EverySectionCanCollapse(t *testing.T) {
 	srv := newTestServer(t)
 	sections := map[string][]string{
-		"general":          {"account", "general", "host"},
+		"general":          {"account", "general", "logging", "host"},
 		"indexers":         {"indexers", "indexer-options"},
 		"download-clients": {"download-clients", "failed-download-handling"},
 		"custom-formats":   {"custom-formats"},
@@ -311,8 +311,8 @@ func TestSettings_EverySectionCanCollapse(t *testing.T) {
 			t.Errorf("want the script that turns section headings into collapse buttons on the %s tab", tab)
 		}
 	}
-	if total != 22 {
-		t.Errorf("want all 22 sections spread over the tabs, got %d", total)
+	if total != 23 {
+		t.Errorf("want all 23 sections spread over the tabs, got %d", total)
 	}
 }
 

@@ -19,6 +19,9 @@ type Config struct {
 	OMDbAPIKey string
 	UserAgent  string
 	ListenAddr string
+	// LogLevel (UMMARR_LOG_LEVEL) - standard, verbose or diagnostic -
+	// overrides Settings -> General -> Logging when set.
+	LogLevel string
 
 	ProwlarrBaseURL string
 	ProwlarrAPIKey  string
@@ -65,7 +68,8 @@ const (
 // UMMARR_LISTEN_ADDR, UMMARR_PROWLARR_BASE_URL, UMMARR_PROWLARR_API_KEY,
 // UMMARR_DELUGE_BASE_URL, UMMARR_DELUGE_PASSWORD,
 // UMMARR_DOWNLOAD_POLL_GRACE_PERIOD, UMMARR_AUTH_USERNAME, UMMARR_AUTH_PASSWORD,
-// UMMARR_SESSION_KEY, and UMMARR_WEBHOOK_TOKEN from the environment.
+// UMMARR_SESSION_KEY, UMMARR_WEBHOOK_TOKEN and UMMARR_LOG_LEVEL from the
+// environment.
 // Missing provider keys are left empty - each provider client reports
 // ErrMissingCredential only when actually invoked without its key, rather
 // than failing at load time.
@@ -98,6 +102,7 @@ func Load() Config {
 	}
 
 	return Config{
+		LogLevel:   os.Getenv("UMMARR_LOG_LEVEL"),
 		TMDBToken:  os.Getenv("UMMARR_TMDB_TOKEN"),
 		OMDbAPIKey: os.Getenv("UMMARR_OMDB_API_KEY"),
 		UserAgent:  userAgent,

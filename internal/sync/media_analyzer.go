@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"path/filepath"
 	"strconv"
@@ -13,6 +12,7 @@ import (
 	gosync "sync"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
@@ -82,7 +82,7 @@ func (a *MediaAnalyzer) Kick() {
 	a.mu.Unlock()
 	safego.Go("analyze media files", func() {
 		if err := a.Run(context.Background()); err != nil && !errors.Is(err, ErrFFprobeMissing) {
-			log.Printf("analyze media files: %v", err)
+			logging.Errorf("analyze media files: %v", err)
 		}
 	})
 }
@@ -271,7 +271,7 @@ func (a *MediaAnalyzer) analyze(ctx context.Context, f store.MediaFile, plexFile
 		}
 	}
 	if err := store.SaveMediaInfo(ctx, a.DB, f.Kind, f.ID, info); err != nil {
-		log.Printf("analyze media files: save %s: %v", path, err)
+		logging.Warnf("analyze media files: save %s: %v", path, err)
 		return
 	}
 	// A music file's quality is its format, bit depth and bitrate, which
@@ -280,7 +280,7 @@ func (a *MediaAnalyzer) analyze(ctx context.Context, f store.MediaFile, plexFile
 	if f.Kind == "track" && info.Error == "" {
 		if audio := AudioQualityFromInfo(info); !audio.Empty() {
 			if err := store.UpdateTrackFileQuality(ctx, a.DB, f.ID, releaseparse.FileQuality{Audio: audio}); err != nil {
-				log.Printf("analyze media files: record audio quality for %s: %v", path, err)
+				logging.Warnf("analyze media files: record audio quality for %s: %v", path, err)
 			}
 		}
 	}

@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
@@ -146,15 +147,22 @@ func categoriesFor(ix store.Indexer, mediaType string) []int {
 }
 
 // usable lists the indexers to ask for purpose and mediaType: enabled for it,
-// with categories for it, not resting after failures, and one per endpoint
-// (a Prowlarr-synced entry wins over a converted one).
-func (s *IndexerService) usable(ctx context.Context, purpose, mediaType string) ([]store.Indexer, error) {
+// with categories for it, not resting after failures, not restricted to tags
+// the item lacks, and one per endpoint (a Prowlarr-synced entry wins over a
+// converted one). itemTags is nil for RSS, which isn't for any one item.
+func (s *IndexerService) usable(ctx context.Context, purpose, mediaType string, itemTags []int64, forItem bool) ([]store.Indexer, error) {
 	if s == nil || s.DB == nil {
 		return nil, nil
 	}
 	all, err := store.ListIndexers(ctx, s.DB)
 	if err != nil {
 		return nil, err
+	}
+	var known map[int64]string
+	if forItem {
+		if known, err = store.TagLabelsByID(ctx, s.DB); err != nil {
+			return nil, err
+		}
 	}
 	sort.SliceStable(all, func(a, b int) bool {
 		if all[a].Synced != all[b].Synced {
@@ -171,6 +179,12 @@ func (s *IndexerService) usable(ctx context.Context, purpose, mediaType string) 
 	for _, ix := range all {
 		if !enabledFor(ix, purpose) || len(categoriesFor(ix, mediaType)) == 0 || ix.BackedOff(now) {
 			continue
+		}
+		if forItem {
+			if restrict, _ := store.IndexerRestriction(ix, known); !store.TagsAllow(restrict, itemTags) {
+				logging.Debugf("search: skipping %s, which is only for items with other tags", ix.Name)
+				continue
+			}
 		}
 		if key := endpointKey(ix); !seen[key] {
 			seen[key] = true
@@ -210,13 +224,23 @@ type searchFunc func(ctx context.Context, c *newznab.Client, caps newznab.Caps, 
 
 // run asks every usable indexer at once and merges what comes back. A
 // failing indexer is recorded (and backs off) without failing the rest.
-func (s *IndexerService) run(ctx context.Context, purpose, mediaType string, search searchFunc) SearchResult {
-	indexers, err := s.usable(ctx, purpose, mediaType)
+// itemTags are the tags of the item searched for; forItem is false for RSS,
+// which isn't for any one item, so no indexer is left out for its tags.
+func (s *IndexerService) run(ctx context.Context, purpose, mediaType string, itemTags []int64, forItem bool, search searchFunc) SearchResult {
+	indexers, err := s.usable(ctx, purpose, mediaType, itemTags, forItem)
 	if err != nil {
 		return SearchResult{Errors: []IndexerError{{Message: err.Error()}}}
 	}
 	if len(indexers) == 0 {
+		logging.Debugf("search (%s %s): no indexer to ask", purpose, mediaTypeLabel(mediaType))
 		return SearchResult{}
+	}
+	if logging.Enabled(logging.Verbose) {
+		names := make([]string, len(indexers))
+		for i, ix := range indexers {
+			names[i] = ix.Name
+		}
+		logging.Debugf("search (%s %s): asking %s", purpose, mediaTypeLabel(mediaType), strings.Join(names, ", "))
 	}
 	type outcome struct {
 		releases []newznab.Release
@@ -251,8 +275,10 @@ func (s *IndexerService) run(ctx context.Context, purpose, mediaType string, sea
 				_ = store.RecordIndexerFailure(context.WithoutCancel(ctx), s.DB, ix.ID, o.err.Error(), s.now())
 			}
 			result.Errors = append(result.Errors, IndexerError{IndexerID: ix.ID, Indexer: ix.Name, Message: o.err.Error()})
+			logging.Warnf("indexer %s: %v", ix.Name, o.err)
 			continue
 		}
+		logging.Debugf("search: %s returned %d release(s)", ix.Name, len(o.releases))
 		if ix.Failures > 0 || ix.LastError != "" {
 			_ = store.RecordIndexerSuccess(ctx, s.DB, ix.ID)
 		}
@@ -350,12 +376,13 @@ type MovieCriteria struct {
 	Year   int
 	IMDbID string // "tt1375666"
 	TMDbID int
+	Tags   []int64 // the movie's, which decide the tag-restricted indexers asked
 }
 
 // SearchMovie follows Radarr: an id search where the indexer supports one,
 // then "Title Year" as text if that found nothing.
 func (s *IndexerService) SearchMovie(ctx context.Context, purpose string, m MovieCriteria) SearchResult {
-	return s.run(ctx, purpose, newznab.MediaMovie, func(ctx context.Context, c *newznab.Client, caps newznab.Caps, capsOK bool, cats []int) ([]newznab.Release, error) {
+	return s.run(ctx, purpose, newznab.MediaMovie, m.Tags, true, func(ctx context.Context, c *newznab.Client, caps newznab.Caps, capsOK bool, cats []int) ([]newznab.Release, error) {
 		if capsOK {
 			ids := url.Values{}
 			if m.TMDbID > 0 && caps.Supports("movie", "tmdbid") {
@@ -390,6 +417,7 @@ type SeriesCriteria struct {
 	TVDBID  int
 	Season  *int
 	Episode *int
+	Tags    []int64 // the series'
 }
 
 func (sc SeriesCriteria) text() string {
@@ -406,7 +434,7 @@ func (sc SeriesCriteria) text() string {
 // SearchSeries searches with t=tvsearch where the indexer supports it, by
 // TVDB id if it can, otherwise by title; plain text search otherwise.
 func (s *IndexerService) SearchSeries(ctx context.Context, purpose string, sc SeriesCriteria) SearchResult {
-	return s.run(ctx, purpose, newznab.MediaSeries, func(ctx context.Context, c *newznab.Client, caps newznab.Caps, capsOK bool, cats []int) ([]newznab.Release, error) {
+	return s.run(ctx, purpose, newznab.MediaSeries, sc.Tags, true, func(ctx context.Context, c *newznab.Client, caps newznab.Caps, capsOK bool, cats []int) ([]newznab.Release, error) {
 		if capsOK && caps.TVSearch != nil {
 			params := url.Values{}
 			if sc.TVDBID > 0 && caps.Supports("tvsearch", "tvdbid") {
@@ -434,12 +462,13 @@ func (s *IndexerService) SearchSeries(ctx context.Context, purpose string, sc Se
 type AlbumCriteria struct {
 	Artist string
 	Album  string
+	Tags   []int64 // the artist's
 }
 
 // SearchAlbum searches with t=music by artist and album where supported, as
 // Lidarr does; plain text search otherwise.
 func (s *IndexerService) SearchAlbum(ctx context.Context, purpose string, a AlbumCriteria) SearchResult {
-	return s.run(ctx, purpose, newznab.MediaMusic, func(ctx context.Context, c *newznab.Client, caps newznab.Caps, capsOK bool, cats []int) ([]newznab.Release, error) {
+	return s.run(ctx, purpose, newznab.MediaMusic, a.Tags, true, func(ctx context.Context, c *newznab.Client, caps newznab.Caps, capsOK bool, cats []int) ([]newznab.Release, error) {
 		if capsOK && caps.Supports("music", "artist") && caps.Supports("music", "album") {
 			return c.Search(ctx, newznab.Query{Mode: "music", Params: url.Values{
 				"artist": {cleanQuery(a.Artist)}, "album": {cleanQuery(a.Album)},
@@ -449,9 +478,18 @@ func (s *IndexerService) SearchAlbum(ctx context.Context, purpose string, a Albu
 	})
 }
 
-// SearchTrack searches for one track by artist, as text.
-func (s *IndexerService) SearchTrack(ctx context.Context, purpose, artist, track string) SearchResult {
-	return s.run(ctx, purpose, newznab.MediaMusic, func(ctx context.Context, c *newznab.Client, _ newznab.Caps, _ bool, cats []int) ([]newznab.Release, error) {
+// SearchTrack searches for one track by artist, as text; tags are the
+// artist's.
+func (s *IndexerService) SearchTrack(ctx context.Context, purpose, artist, track string, tags []int64) SearchResult {
+	return s.run(ctx, purpose, newznab.MediaMusic, tags, true, func(ctx context.Context, c *newznab.Client, _ newznab.Caps, _ bool, cats []int) ([]newznab.Release, error) {
 		return textSearch(ctx, c, cats, cleanQuery(artist+" "+track))
 	})
+}
+
+// mediaTypeLabel names a search's media type for the log.
+func mediaTypeLabel(mediaType string) string {
+	if mediaType == "" {
+		return "rss"
+	}
+	return mediaType
 }

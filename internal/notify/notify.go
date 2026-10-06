@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"net"
 	"net/http"
 	"net/smtp"
@@ -18,6 +17,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
@@ -46,7 +46,7 @@ func (s *Service) OnEvent(ctx context.Context, e store.Event) {
 	}
 	notifications, err := store.ListNotifications(ctx, s.DB)
 	if err != nil {
-		log.Printf("notify: %v", err)
+		logging.Errorf("notify: %v", err)
 		return
 	}
 	// Tags only narrow events about a library item; a health warning has no
@@ -57,7 +57,7 @@ func (s *Service) OnEvent(ctx context.Context, e store.Event) {
 	for _, n := range notifications {
 		if len(n.Tags) > 0 && itemEvent {
 			if itemTags, err = store.ItemTags(ctx, s.DB, e.MovieID, e.SeriesID, e.AlbumID); err != nil {
-				log.Printf("notify: %v", err)
+				logging.Warnf("notify: %v", err)
 			}
 			break
 		}
@@ -70,8 +70,9 @@ func (s *Service) OnEvent(ctx context.Context, e store.Event) {
 			continue
 		}
 		send := func(n store.Notification) {
+			logging.Debugf("notify %s (%s): %s %s", n.Name, n.Implementation, e.Event, e.Title)
 			if err := s.Send(context.Background(), n, e); err != nil {
-				log.Printf("notify %s (%s): %v", n.Name, n.Implementation, err)
+				logging.Errorf("notify %s (%s): %v", n.Name, n.Implementation, err)
 			}
 		}
 		if s.Sync {

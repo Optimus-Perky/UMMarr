@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Optimus-Perky/UMMarr/internal/customformat"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
@@ -76,6 +77,10 @@ type settingsPageData struct {
 
 	AuthUsername string
 	AccessKeys   []accessKeyView
+
+	LogLevel  string
+	LogLevels []logging.Level
+	LogFile   string
 
 	DownloadClients  []downloadClientView
 	DownloadHandling store.DownloadHandling
@@ -201,6 +206,10 @@ func (h *handler) loadSettingsPage(ctx context.Context) (settingsPageData, error
 
 		AuthUsername: authUsername,
 		AccessKeys:   accessKeyViews(ctx, h.deps.DB),
+
+		LogLevel:  logging.CurrentLevel().String(),
+		LogLevels: logging.Levels,
+		LogFile:   h.deps.LogFile,
 
 		DownloadClients:  downloadClients,
 		DownloadHandling: downloadHandling,

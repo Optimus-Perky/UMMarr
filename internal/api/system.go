@@ -48,6 +48,7 @@ type systemPageData struct {
 	Tasks []taskView
 
 	Logs     []logbuf.Line
+	LogFile  string // set when there's a log file to download
 	LogLevel string
 
 	Backups     []backupView
@@ -127,6 +128,7 @@ func (h *handler) System(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	case "logs":
+		data.LogFile = h.deps.LogFile
 		data.LogLevel = r.URL.Query().Get("level")
 		if h.deps.Logs != nil {
 			for _, line := range h.deps.Logs.Lines(0) {

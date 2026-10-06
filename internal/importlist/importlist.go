@@ -11,7 +11,6 @@ import (
 	"encoding/xml"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -19,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/tmdb"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
@@ -188,7 +188,7 @@ func (s *Service) resolveIMDb(ctx context.Context, mediaType string, ids []strin
 		if len(found) > 0 {
 			out = append(out, Item{TMDBID: found[0].ID, Title: found[0].DisplayTitle(), Year: found[0].Year()})
 		} else if t := titles[id]; t != "" {
-			log.Printf("import list: no TMDB %s for %s (%s)", mediaType, id, t)
+			logging.Warnf("import list: no TMDB %s for %s (%s)", mediaType, id, t)
 		}
 	}
 	return out
@@ -362,7 +362,7 @@ func (s *Service) SyncList(ctx context.Context, l store.ImportList) Result {
 			continue
 		}
 		if err := s.add(ctx, l, it); err != nil {
-			log.Printf("import list %s: add %s: %v", l.Name, it.Title, err)
+			logging.Warnf("import list %s: add %s: %v", l.Name, it.Title, err)
 			r.Failed++
 			continue
 		}
@@ -445,7 +445,7 @@ func (s *Service) SyncAll(ctx context.Context) error {
 			continue
 		}
 		r := s.SyncList(ctx, l)
-		log.Printf("import list %s: %s", l.Name, r)
+		logging.Infof("import list %s: %s", l.Name, r)
 		if r.Err != nil && first == nil {
 			first = fmt.Errorf("%s: %w", l.Name, r.Err)
 		}

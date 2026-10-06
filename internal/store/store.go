@@ -8,13 +8,14 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/pressly/goose/v3"
 	_ "modernc.org/sqlite"
+
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 )
 
 //go:embed migrations/*.sql
@@ -108,6 +109,6 @@ func backupBeforeMigrating(db *sql.DB, path string) error {
 	if _, err := db.Exec(`VACUUM INTO ?`, dest); err != nil {
 		return fmt.Errorf("back up the database before migrating it: %w", err)
 	}
-	log.Printf("backed up the database to %s before migrating it from version %d to %d", dest, current, last.Version)
+	logging.Infof("backed up the database to %s before migrating it from version %d to %d", dest, current, last.Version)
 	return nil
 }

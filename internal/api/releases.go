@@ -214,7 +214,7 @@ func (h *handler) MovieReleases(w http.ResponseWriter, r *http.Request) {
 	}
 
 	result := h.deps.Indexer.SearchMovie(r.Context(), sync.PurposeInteractive, sync.MovieCriteria{
-		Title: movie.Title, Year: movie.Year, TMDbID: movie.TMDbID, IMDbID: movie.IMDbID,
+		Title: movie.Title, Year: movie.Year, TMDbID: movie.TMDbID, IMDbID: movie.IMDbID, Tags: movie.Tags,
 	})
 	h.renderReleaseResults(w, r, h.movieDialog(r.Context(), movie), fmt.Sprintf("/movies/%d/grab", movieID), result, func(e *decision.Engine) []decision.Decision {
 		return e.Movie(movie, result.Releases)
@@ -253,7 +253,7 @@ func (h *handler) SeriesReleases(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusNotFound)
 		return
 	}
-	criteria := sync.SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID}
+	criteria := sync.SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID, Tags: series.Tags}
 	if s := r.URL.Query().Get("season"); s != "" {
 		if n, err := strconv.Atoi(s); err == nil {
 			criteria.Season = &n
@@ -330,7 +330,7 @@ func (h *handler) EpisodeReleases(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		return
 	}
-	criteria := sync.SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID, Season: &episode.SeasonNumber, Episode: &episode.EpisodeNumber}
+	criteria := sync.SeriesCriteria{Title: series.Title, TVDBID: series.TVDBID, Season: &episode.SeasonNumber, Episode: &episode.EpisodeNumber, Tags: series.Tags}
 
 	result := h.deps.Indexer.SearchSeries(r.Context(), sync.PurposeInteractive, criteria)
 	grabURL := fmt.Sprintf("/tv/%d/episodes/%d/grab", series.ID, episode.ID)
@@ -376,7 +376,7 @@ func (h *handler) AlbumReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := h.deps.Indexer.SearchAlbum(r.Context(), sync.PurposeInteractive, sync.AlbumCriteria{Artist: album.Artist, Album: album.Title})
+	result := h.deps.Indexer.SearchAlbum(r.Context(), sync.PurposeInteractive, sync.AlbumCriteria{Artist: album.Artist, Album: album.Title, Tags: album.Tags})
 	h.renderReleaseResults(w, r, h.albumDialog(r.Context(), album), fmt.Sprintf("/music/albums/%d/grab", albumID), result, func(e *decision.Engine) []decision.Decision {
 		return e.Album(album, result.Releases)
 	})
@@ -434,7 +434,7 @@ func (h *handler) TrackReleases(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	result := h.deps.Indexer.SearchTrack(r.Context(), sync.PurposeInteractive, album.Artist, track.Title)
+	result := h.deps.Indexer.SearchTrack(r.Context(), sync.PurposeInteractive, album.Artist, track.Title, album.Tags)
 	grabURL := fmt.Sprintf("/music/albums/%d/tracks/%d/grab", albumID, trackID)
 	h.renderReleaseResults(w, r, h.trackDialog(r.Context(), album, track), grabURL, result, func(e *decision.Engine) []decision.Decision {
 		return e.Track(album, track, result.Releases)

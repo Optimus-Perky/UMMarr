@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -12,6 +11,7 @@ import (
 	gosync "sync"
 
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/nfo"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
@@ -962,7 +962,7 @@ func (s *ImportService) replaceMovieFiles(ctx context.Context, ms store.MediaSet
 		}
 		if old := filepath.Join(folder, ref.RelativePath); old != keptPath {
 			if err := importer.RecycleOrRemove(old, ms.RecycleBinPath); err != nil {
-				log.Printf("upgrade: remove replaced movie file %s: %v", old, err)
+				logging.Warnf("upgrade: remove replaced movie file %s: %v", old, err)
 				continue
 			}
 		}
@@ -974,7 +974,7 @@ func (s *ImportService) replaceMovieFiles(ctx context.Context, ms store.MediaSet
 func (s *ImportService) replaceEpisodeFile(ctx context.Context, ms store.MediaSettings, seriesPath string, previous store.FileRef, keptPath string) {
 	if old := filepath.Join(seriesPath, previous.RelativePath); old != keptPath {
 		if err := importer.RecycleOrRemove(old, ms.RecycleBinPath); err != nil {
-			log.Printf("upgrade: remove replaced episode file %s: %v", old, err)
+			logging.Warnf("upgrade: remove replaced episode file %s: %v", old, err)
 			return
 		}
 	}
@@ -989,7 +989,7 @@ func (s *ImportService) recycleExisting(ms store.MediaSettings, dest string) {
 		return
 	}
 	if err := importer.RecycleOrRemove(dest, ms.RecycleBinPath); err != nil {
-		log.Printf("upgrade: move existing %s aside: %v", dest, err)
+		logging.Errorf("upgrade: move existing %s aside: %v", dest, err)
 	}
 }
 
@@ -1083,6 +1083,7 @@ func (s *ImportService) Import(ctx context.Context, grab store.Grab, files []imp
 	default:
 		return "import_failed", "grab has no movie/series/album id set"
 	}
+	logging.Debugf("import %q: %s %s", grab.ReleaseTitle, status, message)
 	if status == "imported" {
 		event := store.EventImported
 		if replaced {
@@ -1132,7 +1133,7 @@ func (s *ImportService) writeMetadata(write func() error) {
 		return
 	}
 	if err := write(); err != nil {
-		log.Printf("metadata: %v", err)
+		logging.Warnf("metadata: %v", err)
 	}
 }
 

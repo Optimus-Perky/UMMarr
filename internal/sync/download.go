@@ -4,7 +4,6 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	gosync "sync"
@@ -18,6 +17,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/downloadclient/transmission"
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
@@ -210,6 +210,7 @@ func (s *DownloadService) clientForRelease(ctx context.Context, g store.Grab, re
 		if ix, err := store.GetIndexer(ctx, s.DB, release.IndexerID); err == nil && ix.DownloadClientID > 0 {
 			for _, dc := range candidates {
 				if dc.ID == int64(ix.DownloadClientID) {
+					logging.Debugf("grab %q: download client %s (chosen by indexer %s)", release.Title, dc.Name, ix.Name)
 					c, err := s.Build(dc)
 					return c, dc, err
 				}
@@ -217,9 +218,14 @@ func (s *DownloadService) clientForRelease(ctx context.Context, g store.Grab, re
 			// Radarr fails the grab here; a client that was deleted or
 			// disabled since shouldn't strand every release from the
 			// indexer, so fall back to the usual choice and say so.
-			log.Printf("%s names download client %d, which isn't enabled or can't take this item - using %s instead", ix.Name, ix.DownloadClientID, candidates[0].Name)
+			logging.Warnf("%s names download client %d, which isn't enabled or can't take this item - using %s instead", ix.Name, ix.DownloadClientID, candidates[0].Name)
 		}
 	}
+	why := "lowest priority number"
+	if len(matching) > 0 {
+		why = "shares a tag with the item"
+	}
+	logging.Debugf("grab %q: download client %s (%s)", release.Title, candidates[0].Name, why)
 	c, err := s.Build(candidates[0]) // clientRows is in priority order
 	return c, candidates[0], err
 }
@@ -460,7 +466,7 @@ const defaultPerGrabCheckTimeout = 60 * time.Second
 // caller's copy of grabs isn't updated this round, but nothing is lost.
 func (s *DownloadService) checkOneGrab(ctx context.Context, g store.Grab, st downloadclient.Status, timeout time.Duration) (store.Grab, bool) {
 	if !s.beginCheck(g.ID) {
-		log.Printf("refresh queue: grab %d (%s) is still being processed by an earlier check - not starting another", g.ID, g.ReleaseTitle)
+		logging.Debugf("refresh queue: grab %d (%s) is still being processed by an earlier check - not starting another", g.ID, g.ReleaseTitle)
 		return g, false
 	}
 	return checkWithTimeout(g, timeout, func() store.Grab {
@@ -484,7 +490,7 @@ func checkWithTimeout(g store.Grab, timeout time.Duration, work func() store.Gra
 	case updated := <-done:
 		return updated, true
 	case <-time.After(timeout):
-		log.Printf("refresh queue: grab %d (%s) still processing after %s - moving on, its update will land whenever it finishes",
+		logging.Warnf("refresh queue: grab %d (%s) still processing after %s - moving on, its update will land whenever it finishes",
 			g.ID, g.ReleaseTitle, timeout)
 		return store.Grab{}, false
 	}
@@ -657,7 +663,7 @@ func (s *DownloadService) RefreshQueue(ctx context.Context) ([]store.Grab, error
 		if !ok {
 			client, err := s.clientForGrab(ctx, g)
 			if err != nil {
-				log.Printf("refresh queue: client for grab %d (%s): %v", g.ID, g.ReleaseTitle, err)
+				logging.Warnf("refresh queue: client for grab %d (%s): %v", g.ID, g.ReleaseTitle, err)
 				continue
 			}
 			grp = &group{client: client}
@@ -675,14 +681,14 @@ func (s *DownloadService) RefreshQueue(ctx context.Context) ([]store.Grab, error
 		}
 		statuses, err := grp.client.Statuses(ctx, ids)
 		if err != nil {
-			log.Printf("refresh queue: get status for %d grabs from %s: %v", len(ids), key, err)
+			logging.Warnf("refresh queue: get status for %d grabs from %s: %v", len(ids), key, err)
 			continue // transient client error - due grabs stay due, tried again next tick
 		}
 		for _, idx := range grp.idx {
 			g := grabs[idx]
 			st, ok := statuses[g.DownloadClientID.String]
 			if !ok {
-				log.Printf("refresh queue: grab %d (%s, id %s) missing from %s's status response (%d ids asked, %d returned)",
+				logging.Warnf("refresh queue: grab %d (%s, id %s) missing from %s's status response (%d ids asked, %d returned)",
 					g.ID, g.ReleaseTitle, g.DownloadClientID.String, key, len(ids), len(statuses))
 				continue
 			}
@@ -706,7 +712,7 @@ func (s *DownloadService) applySeedRatio(ctx context.Context, client downloadcli
 		return
 	}
 	if err := client.SetSeedRatio(ctx, id, ix.SeedRatio.Float64); err != nil {
-		log.Printf("set seed ratio for %q: %v", release.Title, err)
+		logging.Warnf("set seed ratio for %q: %v", release.Title, err)
 	}
 }
 
@@ -750,7 +756,7 @@ func (s *DownloadService) BackfillGrabCoverage(ctx context.Context) error {
 		if err := store.SetGrabCoverage(ctx, s.DB, g.ID, season, episode); err != nil {
 			return err
 		}
-		log.Printf("grab %d (%q) now covers season %d", g.ID, g.ReleaseTitle, season.Int64)
+		logging.Infof("grab %d (%q) now covers season %d", g.ID, g.ReleaseTitle, season.Int64)
 	}
 	return nil
 }

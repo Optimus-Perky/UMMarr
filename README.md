@@ -285,6 +285,8 @@ required; it is shown under System → Status.
   download client or notification with tags is then only used for items
   sharing one of them; one without tags is used for everything, except
   that an item with no matching download client only uses untagged clients.
+  A search for an item doesn't ask indexers it can't use; RSS reads every
+  feed and rejects what a tagged indexer offers for other items.
 - **Settings → Quality** holds the size limits per video quality, in MB per
   minute of runtime. Releases outside the range are rejected, and among the
   rest the one nearest the preferred size ranks first.
@@ -292,6 +294,24 @@ required; it is shown under System → Status.
   airing and movies not yet released or from this year or last; everything
   else is refreshed every 30 days. Run **Refresh all metadata** from System →
   Tasks to refresh everything at once.
+
+## Logging
+
+Three levels, set under Settings → General → Logging (or with
+`UMMARR_LOG_LEVEL`, which wins) and applied without a restart:
+
+- **Standard** (default): errors, warnings and what UMMarr is doing.
+- **Verbose**: also why - which indexers a search asked or skipped and what
+  each returned, the release picked, which download client a grab went to,
+  imports, notifications, and each task's start and finish.
+- **Diagnostic**: also every outbound request (indexers, download clients,
+  metadata providers, notifications), every release a search rejected and
+  why, and every page request. Keys, tokens and passwords in URLs are
+  blanked out. Meant for chasing a problem, not for leaving on.
+
+The log goes to stderr (`docker logs`), to System → Logs, and to
+`logs/ummarr.txt` beside the database - `/config/logs/` in Docker - which
+rolls over at 5 MB, keeping the last five. System → Logs can download it.
 
 ## Development
 

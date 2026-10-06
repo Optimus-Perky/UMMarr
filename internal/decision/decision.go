@@ -275,25 +275,16 @@ func (e *Engine) sizeRule(d *Decision, runtimeMinutes int) {
 }
 
 // tagRule follows Radarr's IndexerTagSpecification: an indexer with tags is
-// only for items sharing one of them. Searches still ask it; this is what
-// keeps its releases - from a search or from RSS - off everything else.
+// only for items sharing one of them. Searches for an item already leave
+// such an indexer out (IndexerService.usable); this is what keeps its
+// releases off everything else when they come from RSS, which isn't for
+// any one item.
 func (e *Engine) tagRule(d *Decision, itemTags []int64) {
 	ix, ok := e.Indexers[d.Release.IndexerID]
 	if !ok {
 		return
 	}
-	// Only tags UMMarr knows count. An indexer synced from Prowlarr can
-	// carry Prowlarr's own tag ids, which mean nothing here - honouring
-	// them would quietly restrict it to whatever UMMarr tag shares the
-	// number.
-	var restrict []int64
-	var labels []string
-	for _, id := range ix.Tags {
-		if label, known := e.TagLabels[int64(id)]; known {
-			restrict = append(restrict, int64(id))
-			labels = append(labels, label)
-		}
-	}
+	restrict, labels := store.IndexerRestriction(ix, e.TagLabels)
 	if store.TagsAllow(restrict, itemTags) {
 		return
 	}

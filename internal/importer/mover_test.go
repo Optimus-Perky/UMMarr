@@ -45,8 +45,12 @@ func TestCopyFile_FailureLeavesNoPartialDestAndKeepsSource(t *testing.T) {
 		t.Fatalf("write src: %v", err)
 	}
 
-	// A character device, not just a path: in some sandboxes /dev/full is
-	// an ordinary file, which accepts writes and proves nothing.
+	// Never as root: root may create CopyFile's temporary file in /dev, and
+	// the copy then succeeds by renaming itself over the device - replacing
+	// /dev/full with an ordinary file for everything else on the machine.
+	if os.Geteuid() == 0 {
+		t.Skip("running as root, which could replace /dev/full itself")
+	}
 	if info, err := os.Stat("/dev/full"); err != nil || info.Mode()&os.ModeCharDevice == 0 {
 		t.Skip("/dev/full not available in this environment")
 	}

@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/merge"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/tmdb"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/tvdb"
@@ -82,12 +82,12 @@ func (s *SeriesService) fetchTVDBBestEffort(ctx context.Context, tmdbSeries *tmd
 	}
 	series, err := client.GetSeries(ctx, id)
 	if err != nil {
-		log.Printf("thetvdb series %d: %v", id, err)
+		logging.Warnf("thetvdb series %d: %v", id, err)
 		return nil, nil
 	}
 	episodes, err := client.GetEpisodes(ctx, id)
 	if err != nil {
-		log.Printf("thetvdb episodes %d: %v", id, err)
+		logging.Warnf("thetvdb episodes %d: %v", id, err)
 	}
 	return series, episodes
 }

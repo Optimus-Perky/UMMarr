@@ -4,13 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
 	"time"
+
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 )
 
 // dirPermBits is what a new folder takes from its parent. Setgid and sticky
@@ -526,10 +527,10 @@ func sweepStalePartials(dir string) {
 		}
 		path := filepath.Join(dir, e.Name())
 		if err := os.Remove(path); err != nil {
-			log.Printf("could not remove abandoned partial file %s: %v", path, err)
+			logging.Warnf("could not remove abandoned partial file %s: %v", path, err)
 			continue
 		}
-		log.Printf("removed abandoned partial file %s (%d bytes, last written %s)",
+		logging.Infof("removed abandoned partial file %s (%d bytes, last written %s)",
 			path, info.Size(), info.ModTime().Format(time.RFC3339))
 	}
 }

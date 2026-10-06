@@ -10,10 +10,11 @@ package safego
 
 import (
 	"fmt"
-	"log"
 	"runtime/debug"
 	"sync"
 	"time"
+
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 )
 
 var running sync.WaitGroup
@@ -34,7 +35,7 @@ func Run(name string, fn func()) (err error) {
 	defer func() {
 		if p := recover(); p != nil {
 			err = fmt.Errorf("%s panicked: %v", name, p)
-			log.Printf("%v\n%s", err, debug.Stack())
+			logging.Errorf("%v\n%s", err, debug.Stack())
 		}
 	}()
 	fn()

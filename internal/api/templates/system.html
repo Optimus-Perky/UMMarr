@@ -55,6 +55,7 @@
       <a class="btn btn-sm btn-ghost{{if eq .LogLevel ""}} active{{end}}" href="/system/logs">All</a>
       <a class="btn btn-sm btn-ghost{{if eq .LogLevel "warn"}} active{{end}}" href="/system/logs?level=warn">Warnings+</a>
       <a class="btn btn-sm btn-ghost{{if eq .LogLevel "error"}} active{{end}}" href="/system/logs?level=error">Errors</a>
+      {{if .LogFile}}<a class="btn btn-sm btn-ghost" href="/system/logs/file">Download log file</a>{{end}}
     </span>
   </div>
   {{if .Logs}}
@@ -62,7 +63,7 @@
     <thead><tr><th>Time</th><th>Level</th><th>Message</th></tr></thead>
     <tbody>{{range .Logs}}<tr><td class="nowrap">{{.Time.Format "15:04:05"}}</td><td><span class="chip {{if eq .Level "error"}}chip-warn{{else if eq .Level "warn"}}chip-info{{else}}chip-muted{{end}}">{{.Level}}</span></td><td class="wrap mono">{{.Text}}</td></tr>{{end}}</tbody>
   </table>
-  {{else}}<p class="notice">Nothing logged yet{{if .LogLevel}} at that level{{end}}. Only this run's lines are kept (the last 3000); the container's own log has everything.</p>{{end}}
+  {{else}}<p class="notice">Nothing logged yet{{if .LogLevel}} at that level{{end}}. Only this run's newest lines are kept here; the log file has the rest. Settings → General → Logging sets how much is logged.</p>{{end}}
 </div>
 {{else if eq .Tab "backups"}}
 <div class="panel">

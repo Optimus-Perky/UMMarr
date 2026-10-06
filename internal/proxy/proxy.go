@@ -10,6 +10,11 @@ import (
 	"strings"
 )
 
+// base is the standard library's transport, taken before anything wraps
+// http.DefaultTransport (internal/logging traces requests by wrapping it),
+// so the proxy is still set on the transport that does the work.
+var base, _ = http.DefaultTransport.(*http.Transport)
+
 // Configure points the default transport (which every client here uses) at
 // proxyURL, bypassing the comma-separated hosts and CIDRs in bypass.
 func Configure(proxyURL, bypass string) error {
@@ -46,11 +51,10 @@ func Configure(proxyURL, bypass string) error {
 		}
 		return false
 	}
-	transport, ok := http.DefaultTransport.(*http.Transport)
-	if !ok {
+	if base == nil {
 		return fmt.Errorf("default transport isn't an *http.Transport")
 	}
-	transport.Proxy = func(r *http.Request) (*url.URL, error) {
+	base.Proxy = func(r *http.Request) (*url.URL, error) {
 		if direct(r.URL.Hostname()) {
 			return nil, nil
 		}
@@ -61,7 +65,7 @@ func Configure(proxyURL, bypass string) error {
 
 // Off removes any proxy.
 func Off() {
-	if transport, ok := http.DefaultTransport.(*http.Transport); ok {
-		transport.Proxy = http.ProxyFromEnvironment
+	if base != nil {
+		base.Proxy = http.ProxyFromEnvironment
 	}
 }

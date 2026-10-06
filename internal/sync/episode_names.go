@@ -4,10 +4,10 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
-	"log"
 	"strconv"
 	"strings"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/merge"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/tmdb"
@@ -101,7 +101,7 @@ func (s *SeriesService) SearchEpisodeNames(ctx context.Context, seriesID int64, 
 			}
 			updated, err := store.UpdateEpisodeDetails(ctx, s.DB, episodeID, episode)
 			if err != nil {
-				log.Printf("episode names %s S%02dE%02d: %v", report.Series, mergedSeason.SeasonNumber, episode.EpisodeNumber, err)
+				logging.Warnf("episode names %s S%02dE%02d: %v", report.Series, mergedSeason.SeasonNumber, episode.EpisodeNumber, err)
 				continue
 			}
 			if updated {
@@ -144,7 +144,7 @@ func (s *SeriesService) SearchMissingEpisodeNames(ctx context.Context) (EpisodeN
 	for _, seriesID := range seriesIDs {
 		report, err := s.SearchEpisodeNames(ctx, seriesID, nil)
 		if err != nil {
-			log.Printf("episode names for series %d: %v", seriesID, err)
+			logging.Warnf("episode names for series %d: %v", seriesID, err)
 			continue
 		}
 		total.Checked += report.Checked

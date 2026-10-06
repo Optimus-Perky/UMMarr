@@ -3,7 +3,6 @@ package sync
 import (
 	"context"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/musicbrainz"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/tmdb"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
@@ -88,7 +88,7 @@ func (s *ImportService) StartLibraryImport(rootFolderID int64, path, kind string
 			}
 		})
 		if err != nil {
-			log.Printf("library import of root folder %d: %v", rootFolderID, err)
+			logging.Errorf("library import of root folder %d: %v", rootFolderID, err)
 		}
 	})
 	return true
@@ -627,6 +627,6 @@ func (s *ImportService) noteUnmatched(ctx context.Context, update func(func(*Lib
 		}
 	})
 	if err := store.RecordUnmatchedFolder(ctx, s.DB, row); err != nil {
-		log.Printf("library import: %v", err)
+		logging.Warnf("library import: %v", err)
 	}
 }

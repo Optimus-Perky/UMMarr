@@ -11,13 +11,13 @@ package api
 import (
 	"context"
 	"crypto/subtle"
-	"log"
 	"net/http"
 	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -53,7 +53,7 @@ func (h *handler) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	}
 	if !ok {
 		h.logins.failed(addr)
-		log.Printf("login: wrong username or password from %s", addr)
+		logging.Warnf("login: wrong username or password from %s", addr)
 		h.renderLoginPage(w, loginPageData{Error: true})
 		return
 	}

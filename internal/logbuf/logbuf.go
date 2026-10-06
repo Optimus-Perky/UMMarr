@@ -6,12 +6,14 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 )
 
 // Line is one logged line.
 type Line struct {
 	Time  time.Time
-	Level string // error, warn or info
+	Level string // error, warn, info, verbose or diagnostic
 	Text  string
 }
 
@@ -50,23 +52,36 @@ func (b *Buffer) add(text string) {
 	if capacity <= 0 {
 		capacity = 2000
 	}
-	b.lines = append(b.lines, Line{Time: time.Now(), Level: level(text), Text: text})
+	lvl, text := level(text)
+	b.lines = append(b.lines, Line{Time: time.Now(), Level: lvl, Text: text})
 	if len(b.lines) > capacity {
 		b.lines = b.lines[len(b.lines)-capacity:]
 	}
 }
 
-// level reads a line's severity from its wording, since the standard log
-// package has none.
-func level(text string) string {
+// tags maps internal/logging's severity tags to levels.
+var tags = []struct{ tag, level string }{
+	{logging.TagError, "error"}, {logging.TagWarn, "warn"}, {logging.TagInfo, "info"},
+	{logging.TagDebug, "verbose"}, {logging.TagTrace, "diagnostic"},
+}
+
+// level returns a line's severity and the line without its tag. Lines from
+// internal/logging carry a tag; anything else (a library writing to the
+// standard log) is judged by its wording.
+func level(text string) (string, string) {
+	for _, t := range tags {
+		if i := strings.Index(text, t.tag); i >= 0 {
+			return t.level, text[:i] + text[i+len(t.tag):]
+		}
+	}
 	lower := strings.ToLower(text)
 	switch {
 	case strings.Contains(lower, "panic") || strings.Contains(lower, "error") || strings.Contains(lower, "failed") || strings.Contains(lower, "fatal"):
-		return "error"
+		return "error", text
 	case strings.Contains(lower, "warn") || strings.Contains(lower, "retry") || strings.Contains(lower, "trying again") || strings.Contains(lower, "missing"):
-		return "warn"
+		return "warn", text
 	}
-	return "info"
+	return "info", text
 }
 
 // Lines returns the newest lines first, at most n (0 for all).

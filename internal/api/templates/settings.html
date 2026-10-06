@@ -59,6 +59,23 @@
   </div>
 </div>
 
+<div class="panel" data-section="logging" id="logging">
+  <div class="panel-head"><h2>Logging</h2></div>
+  <form hx-post="/settings/logging" hx-target="#logging-result" hx-swap="innerHTML">
+    <div class="setting-row">
+      <div class="setting-label">Log Level</div>
+      <div class="setting-control">
+        <select class="select" name="log_level">
+          {{range .LogLevels}}<option value="{{.String}}"{{if eq .String $.LogLevel}} selected{{end}}>{{.Label}}</option>{{end}}
+        </select>
+        <span class="setting-help"><strong>Standard</strong>: errors, warnings and what UMMarr is doing. <strong>Verbose</strong>: also why - which indexers a search asked or skipped, which download client a grab went to, each task's start and finish. <strong>Diagnostic</strong>: also every request to an indexer, download client or metadata provider (keys blanked out), every rejected release and every page request - for chasing a problem, then turn it back down. Takes effect straight away.</span>
+        <span class="setting-help">Logs are kept in <code>{{.LogFile}}</code>, rolling over at 5 MB with the last five kept, and the newest lines are on System → Logs.</span>
+      </div>
+    </div>
+    <div class="form-row"><button class="btn btn-sm" type="submit">Save</button><span id="logging-result"></span></div>
+  </form>
+</div>
+
 <div class="panel" data-section="host" id="host">
   <div class="panel-head"><h2>Host</h2></div>
   <form class="mm-form" hx-post="/settings/host" hx-target="#host-result" hx-swap="innerHTML">

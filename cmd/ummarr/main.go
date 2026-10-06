@@ -36,6 +36,7 @@ import (
 	"github.com/Optimus-Perky/UMMarr/internal/importer"
 	"github.com/Optimus-Perky/UMMarr/internal/importlist"
 	"github.com/Optimus-Perky/UMMarr/internal/logbuf"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/mediainfo"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/musicbrainz"
 	"github.com/Optimus-Perky/UMMarr/internal/metadata/providers/omdb"
@@ -279,10 +280,35 @@ func main() {
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt, syscall.SIGTERM)
 			defer stop()
 
+			// Logging first, so the restore and the migrations are in the
+			// log file too: stderr (docker logs), the System -> Logs buffer,
+			// and logs/ummarr.txt beside the database.
+			cfg := config.Load()
+			logs := &logbuf.Buffer{Capacity: 5000}
+			logFile := filepath.Join(filepath.Dir(dbPath), "logs", "ummarr.txt")
+			logOutputs := []io.Writer{os.Stderr, logs}
+			if f, err := logging.OpenFile(logFile, 5<<20, 5); err != nil {
+				logging.Warnf("no log file: %v", err)
+				logFile = ""
+			} else {
+				defer f.Close()
+				logOutputs = append(logOutputs, f)
+			}
+			log.SetOutput(io.MultiWriter(logOutputs...))
+			envLevel, envLevelSet := logging.ParseLevel(cfg.LogLevel)
+			if cfg.LogLevel != "" && !envLevelSet {
+				logging.Warnf("UMMARR_LOG_LEVEL=%q isn't standard, verbose or diagnostic - ignored", cfg.LogLevel)
+			}
+			envLevelSet = envLevelSet && cfg.LogLevel != ""
+			if envLevelSet {
+				logging.SetLevel(envLevel)
+			}
+			logging.Infof("UMMarr %s built %s", version.Commit, version.Built)
+
 			if applied, err := backup.ApplyPending(dbPath); err != nil {
 				return err
 			} else if applied {
-				log.Println("applied the staged database restore")
+				logging.Infof("applied the staged database restore")
 			}
 			db, err := store.Open(dbPath)
 			if err != nil {
@@ -290,10 +316,15 @@ func main() {
 			}
 			defer db.Close()
 
-			cfg := config.Load()
-			logs := &logbuf.Buffer{Capacity: 3000}
-			log.SetOutput(io.MultiWriter(os.Stderr, logs))
-			log.Printf("UMMarr %s built %s", version.Commit, version.Built)
+			// UMMARR_LOG_LEVEL wins; otherwise Settings -> General -> Logging.
+			if !envLevelSet {
+				if saved, err := store.GetLogLevel(context.Background(), db); err == nil {
+					if level, ok := logging.ParseLevel(saved); ok {
+						logging.SetLevel(level)
+					}
+				}
+			}
+			logging.Infof("logging at %s", logging.CurrentLevel().Label())
 
 			// appSettings is only needed here to decide whether auth should
 			// be enabled at all (see authConfigured below) - indexer and Deluge
@@ -324,7 +355,7 @@ func main() {
 			// Media analysis: FFprobe when it's installed (the image bundles it).
 			var probe func(context.Context, string) (mediainfo.Info, error)
 			if prober, err := mediainfo.FindFFprobe(); err != nil {
-				log.Printf("media analysis: %v", err)
+				logging.Warnf("media analysis: %v", err)
 			} else {
 				probe = prober.Probe
 			}
@@ -374,14 +405,14 @@ func main() {
 					if _, err := rand.Read(sessionKey); err != nil {
 						return fmt.Errorf("generate ephemeral session key: %w", err)
 					}
-					log.Println("warning: UMMARR_SESSION_KEY not set - using an ephemeral key, all sessions will be invalidated on restart")
+					logging.Warnf("UMMARR_SESSION_KEY not set - using an ephemeral key, all sessions will be invalidated on restart")
 				}
 				sessionCipher, err = auth.NewSessionCipher(sessionKey)
 				if err != nil {
 					return err
 				}
 			} else {
-				log.Println("warning: UMMARR_AUTH_PASSWORD not set - the web UI has no login and is open to anyone who can reach it")
+				logging.Warnf("UMMARR_AUTH_PASSWORD not set - the web UI has no login and is open to anyone who can reach it")
 			}
 
 			deps := api.Deps{
@@ -419,7 +450,7 @@ func main() {
 			// Repair grabs made before a series-level grab worked out which
 			// season it had taken - see BackfillGrabCoverage.
 			if err := downloadService.BackfillGrabCoverage(context.Background()); err != nil {
-				log.Printf("backfill grab coverage: %v", err)
+				logging.Warnf("backfill grab coverage: %v", err)
 			}
 
 			// Turn the old single Prowlarr connection into indexers, retrying
@@ -432,11 +463,11 @@ func main() {
 					created, err := sync.ConvertProwlarrConnection(ctx, db, conversion)
 					if err == nil {
 						if created > 0 {
-							log.Printf("converted the Prowlarr connection into %d indexers", created)
+							logging.Infof("converted the Prowlarr connection into %d indexers", created)
 						}
 						return
 					}
-					log.Printf("convert prowlarr connection (trying again in an hour): %v", err)
+					logging.Warnf("convert prowlarr connection (trying again in an hour): %v", err)
 					select {
 					case <-ctx.Done():
 						return
@@ -463,7 +494,7 @@ func main() {
 					}
 					report, err := searchService.RSSSync(ctx)
 					if err == nil {
-						log.Printf("rss sync: %s", report.Summary())
+						logging.Infof("rss sync: %s", report.Summary())
 					}
 					return err
 				}})
@@ -480,20 +511,20 @@ func main() {
 				Description: "Asks the metadata providers for titles, summaries and air dates of episodes still called \"Episode 5\" or nothing at all, without touching the episode lists. Cheaper than a full refresh - run it when a new season is announced.",
 				Run: func(ctx context.Context) error {
 					report, err := seriesService.SearchMissingEpisodeNames(ctx)
-					log.Printf("find episode names: %s", report.Summary())
+					logging.Infof("find episode names: %s", report.Summary())
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Refresh metadata", Interval: 12 * time.Hour,
 				Description: "Re-fetches the movies and series that are due from the metadata providers - new episodes, release dates, titles and posters. Anything still airing or recently released is due every 12 hours, the rest every 30 days.",
 				Run: func(ctx context.Context) error {
 					report, err := sync.RefreshDue(ctx, movieService, seriesService)
-					log.Printf("refresh metadata: %s", report.Summary())
+					logging.Infof("refresh metadata: %s", report.Summary())
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Refresh all metadata", Description: "Re-fetches every movie and series from the metadata providers, whether due or not. Slow on a big library; run it after changing the metadata provider order.",
 				Run: func(ctx context.Context) error {
 					report, err := sync.RefreshLibrary(ctx, movieService, seriesService)
-					log.Printf("refresh all metadata: %s", report.Summary())
+					logging.Infof("refresh all metadata: %s", report.Summary())
 					return err
 				}})
 			artworkDir := filepath.Join(filepath.Dir(dbPath), "artwork")
@@ -506,7 +537,7 @@ func main() {
 					}
 					fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: artworkDir}
 					report, err := fetcher.FetchMissingCovers(ctx, 0)
-					log.Printf("fetch missing artwork: %s", report.Summary())
+					logging.Infof("fetch missing artwork: %s", report.Summary())
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Fetch edition details", Interval: 24 * time.Hour,
@@ -518,20 +549,20 @@ func main() {
 					}
 					fetcher := &sync.CoverFetcher{DB: db, Discogs: client, Dir: artworkDir}
 					report, err := fetcher.FetchEditions(ctx, 0, false)
-					log.Printf("fetch edition details: %s", report.Summary())
+					logging.Infof("fetch edition details: %s", report.Summary())
 					return err
 				}})
 			scheduler.Register(&tasks.Task{Name: "Import artwork",
 				Description: "Finds the cover art already in the library folders (cover.jpg, folder.jpg and friends) and shows it on the album and artist pages. Nothing is downloaded or copied.",
 				Run: func(ctx context.Context) error {
 					report, err := importService.ImportArtwork(ctx)
-					log.Printf("import artwork: %s", report.Summary())
+					logging.Infof("import artwork: %s", report.Summary())
 					if err != nil {
 						return err
 					}
 					filled, err := importService.BackfillAudioQuality(ctx)
 					if filled > 0 {
-						log.Printf("import artwork: filled in the audio quality of %d track file(s)", filled)
+						logging.Infof("import artwork: filled in the audio quality of %d track file(s)", filled)
 					}
 					return err
 				}})
@@ -544,7 +575,7 @@ func main() {
 					}
 					removed, err := importer.CleanRecycleBin(ms.RecycleBinPath, time.Duration(ms.RecycleBinCleanupDays)*24*time.Hour)
 					if removed > 0 {
-						log.Printf("clean up recycling bin: removed %d item(s) older than %d day(s)", removed, ms.RecycleBinCleanupDays)
+						logging.Infof("clean up recycling bin: removed %d item(s) older than %d day(s)", removed, ms.RecycleBinCleanupDays)
 					}
 					return err
 				}})
@@ -571,30 +602,34 @@ func main() {
 			deps.DBPath, deps.StartedAt = dbPath, time.Now()
 			deps.URLBase = urlbase.Normalize(appSettings.Host.URLBase)
 			deps.Restart = func() {
-				log.Println("restarting to apply a restored backup")
+				logging.Infof("restarting to apply a restored backup")
 				stop()
 			}
 
 			host := appSettings.Host
 			if host.ProxyEnabled && host.ProxyURL != "" {
 				if err := proxy.Configure(host.ProxyURL, host.ProxyBypass); err != nil {
-					log.Printf("proxy not used: %v", err)
+					logging.Warnf("proxy not used: %v", err)
 				} else {
-					log.Printf("outbound requests go through %s (bypassing %s)", host.ProxyURL, host.ProxyBypass)
+					logging.Infof("outbound requests go through %s (bypassing %s)", host.ProxyURL, host.ProxyBypass)
 				}
 			}
+			// After the proxy is set: every outbound request is traced at
+			// Diagnostic, whichever client makes it.
+			http.DefaultTransport = logging.Transport{Base: http.DefaultTransport}
+			deps.LogFile = logFile
 			router := urlbase.Middleware(host.URLBase, api.NewRouter(deps))
 			if base := urlbase.Normalize(host.URLBase); base != "" {
-				log.Printf("serving under the URL base %s", base)
+				logging.Infof("serving under the URL base %s", base)
 			}
 			servers := []*http.Server{newHTTPServer(cfg.ListenAddr, router)}
 			if host.SSLEnabled {
 				tlsServer := newHTTPServer(fmt.Sprintf(":%d", host.SSLPort), router)
 				servers = append(servers, tlsServer)
 				go func() {
-					log.Printf("UMMarr listening with SSL on %s", tlsServer.Addr)
+					logging.Infof("UMMarr listening with SSL on %s", tlsServer.Addr)
 					if err := tlsServer.ListenAndServeTLS(host.SSLCertPath, host.SSLKeyPath); err != nil && !errors.Is(err, http.ErrServerClosed) {
-						log.Printf("ssl listener failed: %v", err)
+						logging.Errorf("ssl listener failed: %v", err)
 					}
 				}()
 			}
@@ -673,17 +708,17 @@ const shutdownGrace = 30 * time.Second
 // shutdown stops accepting connections, lets requests in flight finish,
 // then waits for the background goroutines, all within shutdownGrace.
 func shutdown(servers []*http.Server) {
-	log.Println("shutting down: finishing requests and background work")
+	logging.Infof("shutting down: finishing requests and background work")
 	deadline := time.Now().Add(shutdownGrace)
 	ctx, cancel := context.WithDeadline(context.Background(), deadline)
 	defer cancel()
 	for _, srv := range servers {
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Printf("shutdown %s: %v", srv.Addr, err)
+			logging.Warnf("shutdown %s: %v", srv.Addr, err)
 		}
 	}
 	if !safego.Wait(time.Until(deadline)) {
-		log.Println("shutdown: background work still running after the grace period - stopping anyway")
+		logging.Warnf("shutdown: background work still running after the grace period - stopping anyway")
 	}
 }
 

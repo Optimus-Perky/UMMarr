@@ -5,13 +5,13 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/Optimus-Perky/UMMarr/internal/downloadclient"
 	"github.com/Optimus-Perky/UMMarr/internal/indexer/newznab"
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/releaseparse"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
@@ -127,12 +127,12 @@ func (s *DownloadService) redownload(g store.Grab) {
 // Redownload is on.
 func (s *DownloadService) downloadFailed(ctx context.Context, g store.Grab, message string) {
 	if err := s.blocklistGrab(ctx, g, message); err != nil {
-		log.Printf("failed download %d (%s): blocklist: %v", g.ID, g.ReleaseTitle, err)
+		logging.Errorf("failed download %d (%s): blocklist: %v", g.ID, g.ReleaseTitle, err)
 		return
 	}
 	if s.clientRemovesFailed(ctx, g) {
 		if err := s.removeFromClient(ctx, g); err != nil {
-			log.Printf("failed download %d (%s): remove from client: %v", g.ID, g.ReleaseTitle, err)
+			logging.Warnf("failed download %d (%s): remove from client: %v", g.ID, g.ReleaseTitle, err)
 		}
 	}
 	if handling, err := store.GetDownloadHandling(ctx, s.DB); err == nil && handling.RedownloadFailed {
@@ -187,10 +187,10 @@ func (s *SearchService) Redownload(ctx context.Context, g store.Grab) {
 		return
 	}
 	if err != nil {
-		log.Printf("redownload after failed %q: %v", g.ReleaseTitle, err)
+		logging.Warnf("redownload after failed %q: %v", g.ReleaseTitle, err)
 		return
 	}
-	log.Printf("redownload after failed %q: %s", g.ReleaseTitle, report.Summary())
+	logging.Infof("redownload after failed %q: %s", g.ReleaseTitle, report.Summary())
 }
 
 func (s *SearchService) searchEpisodeNumber(ctx context.Context, seriesID int64, season, episode int) (SearchReport, error) {

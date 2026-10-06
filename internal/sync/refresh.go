@@ -3,9 +3,9 @@ package sync
 import (
 	"context"
 	"fmt"
-	"log"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 )
 
@@ -30,7 +30,7 @@ func RefreshLibrary(ctx context.Context, movies *MovieService, series *SeriesSer
 		report.Failed++
 		if logged < 5 {
 			logged++
-			log.Printf("refresh metadata: %s %d: %v", what, id, err)
+			logging.Warnf("refresh metadata: %s %d: %v", what, id, err)
 		}
 	}
 	if movies != nil {
@@ -79,7 +79,7 @@ func RefreshDue(ctx context.Context, movies *MovieService, series *SeriesService
 		report.Failed++
 		if logged < 5 {
 			logged++
-			log.Printf("refresh metadata: %s %d: %v", what, id, err)
+			logging.Warnf("refresh metadata: %s %d: %v", what, id, err)
 		}
 	}
 	if movies != nil {

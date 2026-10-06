@@ -5,12 +5,12 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 	"github.com/Optimus-Perky/UMMarr/internal/store"
 	"github.com/Optimus-Perky/UMMarr/internal/sync"
@@ -261,7 +261,7 @@ func (h *handler) LibraryEditorSearch(w http.ResponseWriter, r *http.Request) {
 				_, err = search.SearchSeries(ctx, id, nil)
 			}
 			if err != nil {
-				log.Printf("mass editor search %s %d: %v", kind, id, err)
+				logging.Warnf("mass editor search %s %d: %v", kind, id, err)
 			}
 		}
 	})

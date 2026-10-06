@@ -88,6 +88,8 @@ type Deps struct {
 	Restart func()
 	// URLBase is the configured URL base, reported by the API.
 	URLBase string
+	// LogFile is where the log is written ("" when only to stderr).
+	LogFile string
 
 	// AuthUsername/AuthPassword and SessionCipher together gate the whole
 	// web UI behind a login page (see auth.go) - the bootstrap/env-var

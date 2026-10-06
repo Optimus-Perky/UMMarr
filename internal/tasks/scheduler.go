@@ -5,11 +5,11 @@ package tasks
 import (
 	"context"
 	"fmt"
-	"log"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/Optimus-Perky/UMMarr/internal/logging"
 	"github.com/Optimus-Perky/UMMarr/internal/safego"
 )
 
@@ -99,21 +99,24 @@ func (s *Scheduler) run(ctx context.Context, t *Task) {
 		t.mu.Unlock()
 		return
 	}
-	t.running, t.lastStarted = true, s.now()
+	started := s.now()
+	t.running, t.lastStarted = true, started
 	t.mu.Unlock()
 	// A task that panics is recorded as failed, like any other error, and
 	// runs again next time it's due.
+	logging.Debugf("task %s: started", t.Name)
 	var err error
 	if panicErr := safego.Run("task "+t.Name, func() { err = t.Run(ctx) }); panicErr != nil {
 		err = panicErr
 	}
+	logging.Debugf("task %s: finished in %s", t.Name, s.now().Sub(started).Round(time.Millisecond))
 	t.mu.Lock()
 	t.running, t.lastFinished = false, s.now()
 	t.lastDuration = t.lastFinished.Sub(t.lastStarted)
 	t.lastError = ""
 	if err != nil {
 		t.lastError = err.Error()
-		log.Printf("task %s: %v", t.Name, err)
+		logging.Errorf("task %s: %v", t.Name, err)
 	}
 	t.runs++
 	t.mu.Unlock()

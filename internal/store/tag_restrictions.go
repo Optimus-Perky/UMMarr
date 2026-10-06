@@ -103,3 +103,18 @@ func TagLabelsByID(ctx context.Context, q Queryer) (map[int64]string, error) {
 	}
 	return out, rows.Err()
 }
+
+// IndexerRestriction is the tags an indexer is restricted to that UMMarr
+// knows (known: TagLabelsByID), with their labels. An indexer synced from
+// Prowlarr can carry Prowlarr's own tag ids, which mean nothing here -
+// honouring them would quietly restrict it to whatever UMMarr tag shares
+// the number - so they are left out. No ids means no restriction.
+func IndexerRestriction(ix Indexer, known map[int64]string) (ids []int64, labels []string) {
+	for _, id := range ix.Tags {
+		if label, ok := known[int64(id)]; ok {
+			ids = append(ids, int64(id))
+			labels = append(labels, label)
+		}
+	}
+	return ids, labels
+}
