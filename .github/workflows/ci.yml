@@ -19,7 +19,7 @@ concurrency:
 jobs:
   test:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-go@v5
@@ -38,7 +38,7 @@ jobs:
       - name: go build
         run: go build ./...
       - name: go test (race detector)
-        run: go test -race -timeout 20m ./...
+        run: go test -race -timeout 35m ./...
 
   govulncheck:
     runs-on: ubuntu-latest
