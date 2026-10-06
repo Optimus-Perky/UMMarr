@@ -62,6 +62,9 @@ type WantedMovie struct {
 	// unknown). Together they say whether a release would be an upgrade.
 	FileQuality releaseparse.FileQuality
 	FileRelease string
+	// Runtime is in minutes, 0 when the providers didn't say - what the
+	// quality definitions' size limits are measured against.
+	Runtime int
 }
 
 const wantedMovieSelect = `
@@ -72,14 +75,15 @@ const wantedMovieSelect = `
 	       COALESCE((SELECT e.external_id FROM external_ids e WHERE e.entity_type = 'movie' AND e.entity_id = mm.id AND e.provider = 'tmdb'), ''),
 	       COALESCE((SELECT e.external_id FROM external_ids e WHERE e.entity_type = 'movie' AND e.entity_id = mm.id AND e.provider = 'imdb'), ''),
 	       COALESCE((SELECT f.quality FROM movie_files f WHERE f.movie_id = m.id ORDER BY f.id DESC LIMIT 1), '{}'),
-	       COALESCE((SELECT g.release_title FROM grabs g WHERE g.movie_id = m.id AND g.status = 'imported' ORDER BY g.added DESC LIMIT 1), '')
+	       COALESCE((SELECT g.release_title FROM grabs g WHERE g.movie_id = m.id AND g.status = 'imported' ORDER BY g.added DESC LIMIT 1), ''),
+	       COALESCE(mm.runtime, 0)
 	FROM movies m JOIN movie_metadata mm ON mm.id = m.movie_metadata_id`
 
 func scanWantedMovie(row interface{ Scan(...any) error }) (WantedMovie, error) {
 	var m WantedMovie
 	var tmdb, quality string
 	err := row.Scan(&m.ID, &m.Title, &m.OriginalTitle, &m.Year, &m.Monitored, &m.HasFile, &m.Queued,
-		&m.MinimumAvailability, &m.InCinemas, &m.PhysicalRelease, &m.DigitalRelease, &m.QualityProfileID, &tmdb, &m.IMDbID, &quality, &m.FileRelease)
+		&m.MinimumAvailability, &m.InCinemas, &m.PhysicalRelease, &m.DigitalRelease, &m.QualityProfileID, &tmdb, &m.IMDbID, &quality, &m.FileRelease, &m.Runtime)
 	m.FileQuality = unmarshalQuality(quality)
 	m.TMDbID, _ = strconv.Atoi(tmdb)
 	return m, err
@@ -128,6 +132,8 @@ type WantedEpisode struct {
 	Queued        bool
 	FileQuality   releaseparse.FileQuality
 	FileRelease   string
+	// Runtime is the episode's own runtime in minutes, else the series'.
+	Runtime int
 }
 
 // WantedSeries is a series with every one of its episodes.
@@ -138,6 +144,7 @@ type WantedSeries struct {
 	TVDBID           int
 	Monitored        bool
 	QualityProfileID sql.NullInt64
+	Runtime          int // minutes, 0 when unknown
 	Episodes         []WantedEpisode
 }
 
@@ -172,7 +179,8 @@ func loadWantedEpisodes(ctx context.Context, q Queryer, s *WantedSeries) error {
 		                 AND `+grabCoversEpisode+`
 		                 ORDER BY g.added DESC LIMIT 1), ''),
 		       EXISTS (SELECT 1 FROM grabs g WHERE g.series_id = e.series_id AND g.status IN (`+queuedGrabStatuses+`)
-		               AND `+grabCoversEpisode+`)
+		               AND `+grabCoversEpisode+`),
+		       COALESCE(e.runtime, 0)
 		FROM episodes e
 		LEFT JOIN seasons se ON se.series_id = e.series_id AND se.season_number = e.season_number
 		WHERE e.series_id = ?
@@ -185,10 +193,13 @@ func loadWantedEpisodes(ctx context.Context, q Queryer, s *WantedSeries) error {
 	for rows.Next() {
 		var e WantedEpisode
 		var quality string
-		if err := rows.Scan(&e.ID, &e.SeasonNumber, &e.EpisodeNumber, &e.AirDate, &e.Monitored, &e.HasFile, &quality, &e.FileRelease, &e.Queued); err != nil {
+		if err := rows.Scan(&e.ID, &e.SeasonNumber, &e.EpisodeNumber, &e.AirDate, &e.Monitored, &e.HasFile, &quality, &e.FileRelease, &e.Queued, &e.Runtime); err != nil {
 			return fmt.Errorf("scan wanted episode: %w", err)
 		}
 		e.FileQuality = unmarshalQuality(quality)
+		if e.Runtime <= 0 {
+			e.Runtime = s.Runtime
+		}
 		s.Episodes = append(s.Episodes, e)
 	}
 	return rows.Err()
@@ -196,13 +207,14 @@ func loadWantedEpisodes(ctx context.Context, q Queryer, s *WantedSeries) error {
 
 const wantedSeriesSelect = `
 	SELECT s.id, sm.title, COALESCE(sm.year, 0), s.monitored, s.quality_profile_id,
-	       COALESCE((SELECT e.external_id FROM external_ids e WHERE e.entity_type = 'series' AND e.entity_id = sm.id AND e.provider = 'tvdb'), '')
+	       COALESCE((SELECT e.external_id FROM external_ids e WHERE e.entity_type = 'series' AND e.entity_id = sm.id AND e.provider = 'tvdb'), ''),
+	       COALESCE(sm.runtime, 0)
 	FROM series s JOIN series_metadata sm ON sm.id = s.series_metadata_id`
 
 func scanWantedSeries(row interface{ Scan(...any) error }) (WantedSeries, error) {
 	var s WantedSeries
 	var tvdb string
-	err := row.Scan(&s.ID, &s.Title, &s.Year, &s.Monitored, &s.QualityProfileID, &tvdb)
+	err := row.Scan(&s.ID, &s.Title, &s.Year, &s.Monitored, &s.QualityProfileID, &tvdb, &s.Runtime)
 	s.TVDBID, _ = strconv.Atoi(tvdb)
 	return s, err
 }

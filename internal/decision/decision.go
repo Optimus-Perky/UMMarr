@@ -50,6 +50,10 @@ type Decision struct {
 	// CustomFormatScore what the item's quality profile scores them.
 	CustomFormats     []string
 	CustomFormatScore int
+	// PreferredSize is the size the quality definition prefers for this
+	// release's runtime, in bytes; 0 when it has no preference. Releases
+	// nearer it rank higher.
+	PreferredSize int64
 	// Upgrade means the item already has a file this release would replace.
 	Upgrade    bool
 	Rejections []string
@@ -82,6 +86,9 @@ type Engine struct {
 
 	// Formats are the custom formats releases are scored against.
 	Formats []customformat.Format
+
+	// QualityDefinitions are the size limits per video quality.
+	QualityDefinitions map[string]store.QualityDefinition
 
 	// blocklist holds failed releases by the item they failed for.
 	blocklist map[blocklistKey][]store.BlocklistEntry
@@ -122,8 +129,13 @@ func Load(ctx context.Context, q store.Queryer, userInvoked bool) (*Engine, erro
 	if err != nil {
 		return nil, err
 	}
+	definitions, err := store.QualityDefinitionsByQuality(ctx, q)
+	if err != nil {
+		return nil, err
+	}
 	e := &Engine{
-		Settings: settings, Propers: media.PropersRepacks, Now: time.Now(), UserInvoked: userInvoked,
+		QualityDefinitions: definitions,
+		Settings:           settings, Propers: media.PropersRepacks, Now: time.Now(), UserInvoked: userInvoked,
 		Indexers: map[int64]store.Indexer{}, Profiles: Profiles{},
 		PreferredWords: preferredWords, Protocols: enabledProtocols(ctx, q), Formats: formats,
 	}
@@ -233,6 +245,29 @@ func (e *Engine) release(r newznab.Release, profileID sql.NullInt64, video bool)
 	return d
 }
 
+// sizeRule follows Radarr's and Sonarr's AcceptableSizeSpecification: the
+// release must fall within its quality's definition for the runtime it
+// covers (a movie, or every episode of a pack). Without a runtime there's
+// nothing to measure against, so nothing is rejected - as in Radarr.
+func (e *Engine) sizeRule(d *Decision, runtimeMinutes int) {
+	def, ok := e.QualityDefinitions[d.Quality.Key()]
+	if !ok || runtimeMinutes <= 0 || d.Release.Size <= 0 {
+		return
+	}
+	perMinute := func(mb float64) int64 { return int64(mb * float64(runtimeMinutes) * (1 << 20)) }
+	if def.MinSize > 0 && d.Release.Size < perMinute(def.MinSize) {
+		d.reject("%s is smaller than %s, the minimum for %s over %d minutes (Settings → Quality)",
+			formatSize(d.Release.Size), formatSize(perMinute(def.MinSize)), def.Quality, runtimeMinutes)
+	}
+	if def.MaxSize > 0 && d.Release.Size > perMinute(def.MaxSize) {
+		d.reject("%s is bigger than %s, the maximum for %s over %d minutes (Settings → Quality)",
+			formatSize(d.Release.Size), formatSize(perMinute(def.MaxSize)), def.Quality, runtimeMinutes)
+	}
+	if def.PreferredSize > 0 {
+		d.PreferredSize = perMinute(def.PreferredSize)
+	}
+}
+
 // missingFlags follows Radarr's RequiredIndexerFlagsSpecification: a release
 // needs at least one of the required flags. It returns the flags' names when
 // the release has none of them.
@@ -336,6 +371,7 @@ func (e *Engine) Movie(m store.WantedMovie, releases []newznab.Release) []Decisi
 	for _, r := range releases {
 		d := e.release(r, m.QualityProfileID, true)
 		d.Target = Target{MovieID: m.ID}
+		e.sizeRule(&d, m.Runtime)
 		if ok, reason := MatchMovie(m, r); !ok {
 			d.reject("%s", reason)
 		}
@@ -453,6 +489,11 @@ func (e *Engine) judgeSeries(d *Decision, s store.WantedSeries, scope SeriesScop
 		return
 	}
 	d.Target.Episodes = episodes
+	runtime := 0
+	for _, ep := range episodes {
+		runtime += ep.Runtime
+	}
+	e.sizeRule(d, runtime)
 	if info.FullSeason {
 		d.Target.FullSeason, d.Target.Season = true, info.Season
 	}
@@ -671,8 +712,22 @@ func (e *Engine) Better(a, b Decision) bool {
 			return sa > sb
 		}
 	}
+	// Radarr's CompareSize: nearest the preferred size wins when the quality
+	// definition has one, otherwise bigger is better - both in 200MB steps,
+	// so a few megabytes either way don't decide it.
 	const step = 200 << 20
+	if a.PreferredSize > 0 && b.PreferredSize > 0 {
+		da, db := absInt64(a.Release.Size-a.PreferredSize)/step, absInt64(b.Release.Size-b.PreferredSize)/step
+		return da < db
+	}
 	return a.Release.Size/step > b.Release.Size/step
+}
+
+func absInt64(n int64) int64 {
+	if n < 0 {
+		return -n
+	}
+	return n
 }
 
 // Profile is a quality profile as decisions use it.

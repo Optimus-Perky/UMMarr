@@ -179,6 +179,7 @@ func NewRouter(deps Deps) http.Handler {
 	mux.HandleFunc("POST /settings/root-folders", h.CreateRootFolder)
 	mux.HandleFunc("DELETE /settings/root-folders/{id}", h.DeleteRootFolder)
 	mux.HandleFunc("POST /settings/quality-profiles", h.CreateQualityProfile)
+	mux.HandleFunc("POST /settings/quality-definitions", h.UpdateQualityDefinitions)
 	mux.HandleFunc("GET /settings/quality-profiles/{id}", h.QualityProfileEdit)
 	mux.HandleFunc("POST /settings/quality-profiles/{id}/items", h.UpdateQualityProfileItems)
 	mux.HandleFunc("POST /settings/quality-profiles/{id}/default", h.SetDefaultQualityProfile)

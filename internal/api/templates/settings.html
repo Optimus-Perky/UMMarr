@@ -929,6 +929,27 @@
 </div>
 {{end}}
 
+{{if eq .Tab "quality"}}
+<div class="panel" data-section="quality-definitions">
+  <div class="panel-head"><h2>Quality definitions</h2></div>
+  <p class="notice">How big a release of each quality may be, in megabytes per minute of runtime - a two-hour movie at 10 MB/min is about 1.2 GB. A release outside its range is turned away, which catches fakes and samples labelled as a better quality. Among releases that pass, the one nearest the preferred size ranks highest; with no preferred size, the biggest. Blank or 0 means no limit. Movies and TV only - music is judged on format and bitrate.</p>
+  <form hx-post="/settings/quality-definitions" hx-target="#quality-definitions-result" hx-swap="innerHTML">
+    <table class="settings-table">
+      <tr><th>Quality</th><th style="text-align:right">Minimum</th><th style="text-align:right">Preferred</th><th style="text-align:right">Maximum</th></tr>
+      {{range .QualityDefs}}
+      <tr>
+        <td>{{.Quality}}</td>
+        <td style="text-align:right"><input type="number" min="0" step="0.1" name="min_{{.Quality}}" value="{{if .MinSize}}{{.MinSize}}{{end}}" placeholder="0" aria-label="{{.Quality}} minimum MB per minute" style="width:7em;text-align:right"></td>
+        <td style="text-align:right"><input type="number" min="0" step="0.1" name="preferred_{{.Quality}}" value="{{if .PreferredSize}}{{.PreferredSize}}{{end}}" placeholder="none" aria-label="{{.Quality}} preferred MB per minute" style="width:7em;text-align:right"></td>
+        <td style="text-align:right"><input type="number" min="0" step="0.1" name="max_{{.Quality}}" value="{{if .MaxSize}}{{.MaxSize}}{{end}}" placeholder="no limit" aria-label="{{.Quality}} maximum MB per minute" style="width:7em;text-align:right"></td>
+      </tr>
+      {{end}}
+    </table>
+    <div class="form-row"><button class="btn btn-sm" type="submit">Save</button><span id="quality-definitions-result"></span></div>
+  </form>
+</div>
+{{end}}
+
 {{if eq .Tab "profiles"}}
 <div class="panel" data-section="quality-profiles">
   <div class="panel-head"><h2>Quality profiles</h2></div>

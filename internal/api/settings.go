@@ -42,7 +42,7 @@ func resolveRootFolderPath(input string) string {
 type settingsTab struct{ Slug, Label string }
 
 var settingsTabs = []settingsTab{
-	{"media-management", "Media Management"}, {"profiles", "Profiles"}, {"indexers", "Indexers"}, {"download-clients", "Download Clients"}, {"custom-formats", "Custom Formats"},
+	{"media-management", "Media Management"}, {"profiles", "Profiles"}, {"quality", "Quality"}, {"indexers", "Indexers"}, {"download-clients", "Download Clients"}, {"custom-formats", "Custom Formats"},
 	{"import-lists", "Import Lists"}, {"connect", "Connect"}, {"metadata", "Metadata"}, {"general", "General"},
 }
 
@@ -68,6 +68,7 @@ type settingsPageData struct {
 	QualityProfiles  []store.QualityProfile
 	AudioProfiles    []store.QualityProfile
 	PreferredWords   []store.PreferredWord
+	QualityDefs      []store.QualityDefinition
 	Indexers         []indexerView
 	IndexerSyncHint  bool
 	IndexerOptions   store.IndexerSettings
@@ -177,6 +178,10 @@ func (h *handler) loadSettingsPage(ctx context.Context) (settingsPageData, error
 	if err != nil {
 		return settingsPageData{}, err
 	}
+	qualityDefs, err := store.ListQualityDefinitions(ctx, h.deps.DB)
+	if err != nil {
+		return settingsPageData{}, err
+	}
 	exclusions, _ := store.ListExclusions(ctx, h.deps.DB)
 	if err != nil {
 		return settingsPageData{}, err
@@ -189,6 +194,7 @@ func (h *handler) loadSettingsPage(ctx context.Context) (settingsPageData, error
 		QualityProfiles: videoProfiles(qualityProfiles),
 		AudioProfiles:   audioProfiles(qualityProfiles),
 		PreferredWords:  preferredWords,
+		QualityDefs:     qualityDefs,
 		Indexers:        indexers,
 		IndexerSyncHint: syncHint,
 		IndexerOptions:  indexerOptions,
